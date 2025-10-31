@@ -4,10 +4,9 @@
 DualVNH5019MotorShield md;
 
 // ===== Encoder Pins ===== //
-const int pinA = 2;   // CLK - Interrupt pin (Channel A)
-const int pinB = 5;   // DT  - Regular digital pin (Channel B)
-volatile long position = 0;
-volatile int prevA = LOW;
+const int pinA                = 2;      // CLK - Interrupt pin (Channel A)
+const int pinB                = 5;      // DT  - Regular digital pin (Channel B)
+volatile int prevA            = LOW;
 
 // ===== Constants ===== //
 const long SAFE_POS_COUNTS    = 0;      // Encoder count for home/safe zone
@@ -18,6 +17,8 @@ const int m3UpSpeed           = 100;    // Speed for M3 to raise
 const int m4Speed             = 100;    // Speed for M4 to move the belt
 const int EEPROM_ADDR_POS     = 0;      // Where encoder count is stored
 const int SAFE_SPEED          = 150;    // Speed to reach home
+volatile long position        = 0;      // Motor Position
+
 
 // ===== REFERENCE SPEED TABLE (-400 to +400, with Duty Percentage) ===== //
 /*
@@ -41,7 +42,7 @@ void moveM3Down(long targetCount, int speed);   // Move Motor Down (M3)
 void moveM3Up(long targetCount, int speed);     // Move Motor Up (M3)
 void runMotor4Cont(int speed);                  // Run Motor 4 Continuously
 void stopMotor(int motorNumber);                // Stop Individual Motor        
-void saveEncoderPos(long pos);                  // Saves The Encoder Position To EEPROM
+void savedEncoderPos();                         // Saves The Encoder Position To EEPROM
 long loadEncoderPos();                          // Load The Encoder Position From EEPROM
 void goToSafePos();                             // Returns The Motors To The Safe Position
 
@@ -118,7 +119,7 @@ void runM4Cont(int speed){
 void stopMotor(int motorNumber){
   if (motorNumber == 3){
     md.setM2Speed(0);
-    savedEncoderPos(position);
+    savedEncoderPos();
     Serial.println("Motor 3 Stopped And Position Saved.");
   } else if (motorNumber == 4){
     md.setM1Speed(0);
@@ -128,14 +129,17 @@ void stopMotor(int motorNumber){
   }
 }
 
-void savedEncoderPos(long pos){
-  EEPROM.put(EEPROM_ADDR_POS, position);
+void savedEncoderPos(){
+  noInterrupts();
+  long tempPos = position;
+  interrupts();
+  EEPROM.put(EEPROM_ADDR_POS, tempPos);
   Serial.print("Saved Encoder Position to EEPROM: ");
-  Serial.println(position);
+  Serial.println(tempPos);
 }
 
 long loadEncoderPos(){
-  long savedPos = 0;
+  long savedPos;
   EEPROM.get(EEPROM_ADDR_POS, savedPos);
   Serial.print("Loaded Encoder Position from EEPROM: ");
   Serial.println(savedPos);
@@ -166,7 +170,7 @@ void goToSafePos(){
 
   md.setM2Speed(0);
   position = SAFE_POS_COUNTS;
-  savedEncoderPos(position);
+  savedEncoderPos();
   Serial.println("Gentlemen, We Have landed In The Safe Position");
 }
 
