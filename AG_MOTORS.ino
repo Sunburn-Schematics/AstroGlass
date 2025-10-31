@@ -171,4 +171,14 @@ void loop(){
 }
 
 
+// FOR PEROSNAL //
+/*
+Updating GITHUB:
+  - git status
+  - git add .
+  - git commit -m "Enter any comments"
+  - git push
+*/
+
+
 
