@@ -1,3 +1,4 @@
+#include <EEPROM.h>                 // Safe Positons
 #include <DualVNH5019MotorShield.h> // Motor Shield Built-In Library
 
 DualVNH5019MotorShield md;
@@ -9,10 +10,11 @@ volatile long position = 0;
 volatile int prevA = LOW;
 
 // ===== Constants ===== //
-const long countsPerRev = 50;     // Adjust for the motor rotaion
-const int m3DownSpeed   = 100;    // Speed for M3 to lower
-const int m3UpSpeed     = 100;    // Speed for M3 to raise
-const int m4Speed       = 100;    // Speed for M4 to move the belt
+const long countsPerRev   = 50;     // Adjust for the motor rotaion
+const int m3DownSpeed     = 100;    // Speed for M3 to lower
+const int m3UpSpeed       = 100;    // Speed for M3 to raise
+const int m4Speed         = 100;    // Speed for M4 to move the belt
+const int EEPROM_ADDR_POS = 0;      // Where encoder count is stored
 
 // ===== REFERENCE SPEED TABLE (-400 to +400, with Duty Percentage) ===== //
 /*
@@ -30,16 +32,18 @@ const int m4Speed       = 100;    // Speed for M4 to move the belt
 */
 
 // ===== Function Declarations ===== //
-void updateEncoder();
-bool waitForStart();
-void moveM3Down(long targetCount, int speed);
-void moveM3Up(long targetCount, int speed);
-void runMotor4Cont(int speed);
-void stopMotor(int motorNumber);
+void updateEncoder();                           // Encoder Interrupt Service Routine
+bool waitForStart();                            // Waits For User To Input START
+void moveM3Down(long targetCount, int speed);   // Move Motor Down (M3)
+void moveM3Up(long targetCount, int speed);     // Move Motor Up (M3)
+void runMotor4Cont(int speed);                  // Run Motor 4 Continuously
+void stopMotor(int motorNumber);                // Stop Individual Motor        
+void saveEncoderPos(long pos);                  // Saves The Encoder Position To EEPROM
+long loadEncoderPos();                          // Load The Encoder Position From EEPROM
+void goToSafePos();                             // Returns The Motors To The Safe Position
 
 // ====== Function Definitions ====== //
 
-// Encoder Interrupt Service Routine
 void updateEncoder(){
   int currentA = digitalRead(pinA);
   int currentB = digitalRead(pinB);
@@ -51,7 +55,6 @@ void updateEncoder(){
   prevA = currentA;
 }
 
-// Waits For User To Input START
 bool waitForStart(){
   Serial.println("Type 'START' to activate the sequence or 'STOP' to abort...");
 
@@ -73,7 +76,6 @@ bool waitForStart(){
   }
 }
 
-// Move Motor Down (M3)
 void moveM3Down(long targetCount, int speed){
   position = 0;
   md.setM2Speed(-speed);
@@ -89,7 +91,6 @@ void moveM3Down(long targetCount, int speed){
   Serial.println("M3 Reached Lower Position.");
 }
 
-// Move Motor Up (M3)
 void moveM3Up(long targetCount, int speed){
   position = 0;
   md.setM2Speed(speed);
@@ -105,7 +106,12 @@ void moveM3Up(long targetCount, int speed){
   Serial.println("M3 Returned To Start Position.");
 }
 
-// Stop Motor
+void runM4Cont(int speed){
+  md.setM1Speed(speed);
+  Serial.print("Motor 4 Running Continuously At Speed ");
+  Serial.println(speed);
+}
+
 void stopMotor(int motorNumber){
   if (motorNumber == 3){
     md.setM2Speed(0);
@@ -119,11 +125,22 @@ void stopMotor(int motorNumber){
   }
 }
 
-// Run Motor 4 Continuously
-void runM4Cont(int speed){
-  md.setM1Speed(speed);
-  Serial.print("Motor 4 Running Continuously At Speed ");
-  Serial.println(speed);
+void saveEncoderPos(long pos){
+  EEPROM.put(EEPROM_ADDR_POS, pos);
+  Serial.print("Saved Encoder Position to EEPROM: ");
+  Serial.println(pos);
+}
+
+long loadEncoderPos(){
+  long savedPos = 0;
+  EEPROM.get(EEPROM_ADDR_POS, savedPos);
+  Serial.print("Loaded Encoder Position from EEPROM: ");
+  Serial.println(savedPos);
+  return savedPos;
+}
+
+void goToSafePos(){
+  
 }
 
 // ===== Full Sequence in Action ===== //
