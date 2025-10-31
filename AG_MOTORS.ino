@@ -1,4 +1,4 @@
-#include <DualVNH5019MotorShield.h>
+#include <DualVNH5019MotorShield.h> // Motor Shield Built-In Library
 
 DualVNH5019MotorShield md;
 
@@ -31,7 +31,7 @@ const int m4Speed       = 100;    // Speed for M4 to move the belt
 
 // ===== Function Declarations ===== //
 void updateEncoder();
-void waitForStart();
+bool waitForStart();
 void moveM3Down(long targetCount, int speed);
 void moveM3Up(long targetCount, int speed);
 void runMotor4Cont(int speed);
@@ -52,7 +52,7 @@ void updateEncoder(){
 }
 
 // Waits For User To Input START
-void waitForStart(){
+bool waitForStart(){
   Serial.println("Type 'START' to activate the sequence or 'STOP' to abort...");
 
   while (true){
@@ -142,7 +142,7 @@ void setup(){
 void loop(){
   // If STOP was entered, it does nothing
   if (!waitForStart()){
-    Serial.println("SYSTEM IDEL");
+    Serial.println("SYSTEM IDLE");
     while (true);  // Freezes "safely"
   }
 
@@ -169,3 +169,6 @@ void loop(){
   Serial.println("=== SEQUENCE COMPLETE ===");
   while (true);  // Stops program after one full sequence
 }
+
+
+
