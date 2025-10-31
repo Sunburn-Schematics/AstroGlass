@@ -31,6 +31,7 @@ const int m4Speed       = 100;    // Speed for M4 to move the belt
 
 // ===== Function Declarations ===== //
 void updateEncoder();
+void waitForStart();
 void moveM3Down(long targetCount, int speed);
 void moveM3Up(long targetCount, int speed);
 void runMotor4Cont(int speed);
@@ -43,64 +44,85 @@ void updateEncoder(){
   int currentA = digitalRead(pinA);
   int currentB = digitalRead(pinB);
 
-  if (prevA == LOW && currentA == HIGH) {
+  if (prevA == LOW && currentA == HIGH){
     if (currentB == LOW) position++;
     else position--;
   }
   prevA = currentA;
 }
 
+// Waits For User To Input START
+void waitForStart(){
+  Serial.println("Type 'START' to activate the sequence or 'STOP' to abort...");
+
+  while (true){
+    if (Serial.available() > 0){  // If something was typed in
+      String input = Serial.readStringUntil('\n');  // Reads until 'Enter' key
+      input.trim();  // Removes the space and/or newline
+
+      if (input.equalsIgnoreCase("START")){
+        Serial.println("STARTING SEQUENCE");
+        return true;  // Continues to main loop
+      } else if (input.equalsIgnoreCase("STOP")){
+        Serial.println("ABORTING SEQUENCE");
+        return false;
+      } else {
+        Serial.println("Wrong input dude, type 'START' or 'STOP'.");
+      }
+    }
+  }
+}
+
 // Move Motor Down (M3)
-void moveM3Down(long targetCount, int speed) {
+void moveM3Down(long targetCount, int speed){
   position = 0;
   md.setM2Speed(-speed);
-  Serial.println("M3 lowering...");
+  Serial.println("M3 Lowering...");
 
-  while (abs(position) < targetCount) {
-    Serial.print("Encoder count: ");
+  while (abs(position) < targetCount){
+    Serial.print("Encoder Count: ");
     Serial.println(position);
     delay(10);
   }
 
   stopMotor(3);
-  Serial.println("M3 reached lower position.");
+  Serial.println("M3 Reached Lower Position.");
 }
 
 // Move Motor Up (M3)
-void moveM3Up(long targetCount, int speed) {
+void moveM3Up(long targetCount, int speed){
   position = 0;
   md.setM2Speed(speed);
-  Serial.println("M3 raising...");
+  Serial.println("M3 Raising...");
 
-  while (abs(position) < targetCount) {
-    Serial.print("Encoder count: ");
+  while (abs(position) < targetCount){
+    Serial.print("Encoder Count: ");
     Serial.println(position);
     delay(10);
   }
 
   stopMotor(3);
-  Serial.println("M3 returned to start position.");
+  Serial.println("M3 Returned To Start Position.");
 }
 
 // Stop Motor
-void stopMotor(int motorNumber) {
-  if (motorNumber == 3) {
+void stopMotor(int motorNumber){
+  if (motorNumber == 3){
     md.setM2Speed(0);
-    Serial.println("Motor 3 stopped.");
+    Serial.println("Motor 3 Stopped.");
   } 
-  else if (motorNumber == 4) {
+  else if (motorNumber == 4){
     md.setM1Speed(0);
-    Serial.println("Motor 4 stopped.");
-  } 
-  else {
-    Serial.println("Invalid motor number! Use 3 or 4.");
+    Serial.println("Motor 4 Stopped.");
+  } else {
+    Serial.println("Invalid Motor number (For Now), Use Either 3 or 4.");
   }
 }
 
 // Run Motor 4 Continuously
-void runM4Cont(int speed) {
+void runM4Cont(int speed){
   md.setM1Speed(speed);
-  Serial.print("Motor 4 running continuously at speed ");
+  Serial.print("Motor 4 Running Continuously At Speed ");
   Serial.println(speed);
 }
 
@@ -118,19 +140,10 @@ void setup(){
 }
 
 void loop(){
-  // Wait for the user to type "START"
-  Serial.println("Type 'START' to activate sequence...");
-  while (true) {
-    if (Serial.available() > 0){  // If something was typed in
-      String input = Serial.readStringUntil('\n');  // Reads until 'Enter' key
-      input.trim();  // Removes the space and/or newline
-      if (input.equalsIgnoreCase("START")){
-        Serial.println("STARTING SEQUENCE");
-        break;  // Exits the waiting loop and continues
-      } else {
-        Serial.println("Not a correct input, type 'START' to run the sequence.");
-      }
-    }
+  // If STOP was entered, it does nothing
+  if (!waitForStart()){
+    Serial.println("SYSTEM IDEL");
+    while (true);  // Freezes "safely"
   }
 
   position = 0;  // Reset encoder position
@@ -156,4 +169,3 @@ void loop(){
   Serial.println("=== SEQUENCE COMPLETE ===");
   while (true);  // Stops program after one full sequence
 }
-
