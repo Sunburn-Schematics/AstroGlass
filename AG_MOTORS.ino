@@ -10,11 +10,14 @@ volatile long position = 0;
 volatile int prevA = LOW;
 
 // ===== Constants ===== //
-const long countsPerRev   = 50;     // Adjust for the motor rotaion
-const int m3DownSpeed     = 100;    // Speed for M3 to lower
-const int m3UpSpeed       = 100;    // Speed for M3 to raise
-const int m4Speed         = 100;    // Speed for M4 to move the belt
-const int EEPROM_ADDR_POS = 0;      // Where encoder count is stored
+const long SAFE_POS_COUNTS    = 0;      // Encoder count for home/safe zone
+const long HOME_OFFSET_COUNTS = 150;    // Small offset to ensure it's settled
+const long countsPerRev       = 50;     // Adjust for the motor rotaion
+const int m3DownSpeed         = 100;    // Speed for M3 to lower
+const int m3UpSpeed           = 100;    // Speed for M3 to raise
+const int m4Speed             = 100;    // Speed for M4 to move the belt
+const int EEPROM_ADDR_POS     = 0;      // Where encoder count is stored
+const int SAFE_SPEED          = 150;    // Speed to reach home
 
 // ===== REFERENCE SPEED TABLE (-400 to +400, with Duty Percentage) ===== //
 /*
@@ -115,9 +118,9 @@ void runM4Cont(int speed){
 void stopMotor(int motorNumber){
   if (motorNumber == 3){
     md.setM2Speed(0);
-    Serial.println("Motor 3 Stopped.");
-  } 
-  else if (motorNumber == 4){
+    savedEncoderPos(position);
+    Serial.println("Motor 3 Stopped And Position Saved.");
+  } else if (motorNumber == 4){
     md.setM1Speed(0);
     Serial.println("Motor 4 Stopped.");
   } else {
@@ -125,10 +128,10 @@ void stopMotor(int motorNumber){
   }
 }
 
-void saveEncoderPos(long pos){
-  EEPROM.put(EEPROM_ADDR_POS, pos);
+void savedEncoderPos(long pos){
+  EEPROM.put(EEPROM_ADDR_POS, position);
   Serial.print("Saved Encoder Position to EEPROM: ");
-  Serial.println(pos);
+  Serial.println(position);
 }
 
 long loadEncoderPos(){
@@ -140,7 +143,31 @@ long loadEncoderPos(){
 }
 
 void goToSafePos(){
-  
+  long savedPos = loadEncoderPos();   // Reads the last saved encoder value
+  position = savedPos;                     // Initialize the position tracking
+
+  Serial.println("Moving M3 To Safe Position...");
+
+  if (position > SAFE_POS_COUNTS){
+    md.setM2Speed(-SAFE_SPEED);
+    while (position > SAFE_POS_COUNTS + HOME_OFFSET_COUNTS){
+      Serial.print("Safe Homing... Encoder: ");
+      Serial.println(position);
+      delay(10);
+    }
+  } else if (position < SAFE_POS_COUNTS){
+    md.setM2Speed(SAFE_SPEED);
+    while (position < SAFE_POS_COUNTS - HOME_OFFSET_COUNTS){
+      Serial.print("Safe Homing... Encoder: ");
+      Serial.println(position);
+      delay(10);
+    }
+  }
+
+  md.setM2Speed(0);
+  position = SAFE_POS_COUNTS;
+  savedEncoderPos(position);
+  Serial.println("Gentlemen, We Have landed In The Safe Position");
 }
 
 // ===== Full Sequence in Action ===== //
@@ -162,6 +189,9 @@ void loop(){
     Serial.println("SYSTEM IDLE");
     while (true);  // Freezes "safely"
   }
+
+  goToSafePos();
+  delay(1000);
 
   position = 0;  // Reset encoder position
 
