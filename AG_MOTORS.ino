@@ -1,4 +1,5 @@
 #include <EEPROM.h>                 // Safe Positons
+#include "Astro_Motors.h"           // Added .h and .cpp for cleaning
 #include <DualVNH5019MotorShield.h> // Motor Shield Built-In Library
 
 DualVNH5019MotorShield md;
