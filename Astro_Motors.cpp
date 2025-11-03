@@ -30,21 +30,20 @@
 // }
 
 bool waitForStart(){
-  Serial.println("Type 'START' to activate the sequence or 'STOP' to abort...");
+  Serial.println("Press SPACE to activate the sequence or 'S' to abort...");
 
   while (true){
     if (Serial.available() > 0){  // If something was typed in
-      String input = Serial.readStringUntil('\n');  // Reads until 'Enter' key
-      input.trim();  // Removes the space and/or newline
+      char key = Serial.read();
 
-      if (input.equalsIgnoreCase("START")){
+      if (key == ' '){
         Serial.println("STARTING SEQUENCE");
         return true;  // Continues to main loop
-      } else if (input.equalsIgnoreCase("STOP")){
+      } else if (key == 'S' || key == 's'){
         Serial.println("ABORTING SEQUENCE");
         return false;
       } else {
-        Serial.println("Wrong input dude, type 'START' or 'STOP'.");
+        Serial.println("Invalid input dude, press SPACE to start or 'S' to stop.");
       }
     }
   }
