@@ -38,12 +38,12 @@ volatile long position        = 0;      // Motor Position
 
 // ===== Function Declarations ===== //
 void updateEncoder();                           // Encoder Interrupt Service Routine
+void savedEncoderPos();                         // Saves The Encoder Position To EEPROM
+long loadEncoderPos();                          // Load The Encoder Position From EEPROM
 void moveM3Down(long targetCount, int speed);   // Move Motor Down (M3)
 void moveM3Up(long targetCount, int speed);     // Move Motor Up (M3)
 void runMotor4Cont(int speed);                  // Run Motor 4 Continuously
 void stopMotor(int motorNumber);                // Stop Individual Motor        
-void savedEncoderPos();                         // Saves The Encoder Position To EEPROM
-long loadEncoderPos();                          // Load The Encoder Position From EEPROM
 void goToSafePos();                             // Returns The Motors To The Safe Position
 
 // ====== Function Definitions ====== //
@@ -57,6 +57,23 @@ void updateEncoder(){
     else position--;
   }
   prevA = currentA;
+}
+
+void savedEncoderPos(){
+  noInterrupts();
+  long tempPos = position;
+  interrupts();
+  EEPROM.put(EEPROM_ADDR_POS, tempPos);
+  Serial.print("Saved Encoder Position to EEPROM: ");
+  Serial.println(tempPos);
+}
+
+long loadEncoderPos(){
+  long savedPos;
+  EEPROM.get(EEPROM_ADDR_POS, savedPos);
+  Serial.print("Loaded Encoder Position from EEPROM: ");
+  Serial.println(savedPos);
+  return savedPos;
 }
 
 void moveM3Down(long targetCount, int speed){
@@ -106,23 +123,6 @@ void stopMotor(int motorNumber){
   } else {
     Serial.println("Invalid Motor number (For Now), Use Either 3 or 4.");
   }
-}
-
-void savedEncoderPos(){
-  noInterrupts();
-  long tempPos = position;
-  interrupts();
-  EEPROM.put(EEPROM_ADDR_POS, tempPos);
-  Serial.print("Saved Encoder Position to EEPROM: ");
-  Serial.println(tempPos);
-}
-
-long loadEncoderPos(){
-  long savedPos;
-  EEPROM.get(EEPROM_ADDR_POS, savedPos);
-  Serial.print("Loaded Encoder Position from EEPROM: ");
-  Serial.println(savedPos);
-  return savedPos;
 }
 
 void goToSafePos(){
