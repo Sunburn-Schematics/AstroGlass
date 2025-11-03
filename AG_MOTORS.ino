@@ -38,7 +38,6 @@ volatile long position        = 0;      // Motor Position
 
 // ===== Function Declarations ===== //
 void updateEncoder();                           // Encoder Interrupt Service Routine
-bool waitForStart();                            // Waits For User To Input START
 void moveM3Down(long targetCount, int speed);   // Move Motor Down (M3)
 void moveM3Up(long targetCount, int speed);     // Move Motor Up (M3)
 void runMotor4Cont(int speed);                  // Run Motor 4 Continuously
@@ -58,27 +57,6 @@ void updateEncoder(){
     else position--;
   }
   prevA = currentA;
-}
-
-bool waitForStart(){
-  Serial.println("Type 'START' to activate the sequence or 'STOP' to abort...");
-
-  while (true){
-    if (Serial.available() > 0){  // If something was typed in
-      String input = Serial.readStringUntil('\n');  // Reads until 'Enter' key
-      input.trim();  // Removes the space and/or newline
-
-      if (input.equalsIgnoreCase("START")){
-        Serial.println("STARTING SEQUENCE");
-        return true;  // Continues to main loop
-      } else if (input.equalsIgnoreCase("STOP")){
-        Serial.println("ABORTING SEQUENCE");
-        return false;
-      } else {
-        Serial.println("Wrong input dude, type 'START' or 'STOP'.");
-      }
-    }
-  }
 }
 
 void moveM3Down(long targetCount, int speed){
