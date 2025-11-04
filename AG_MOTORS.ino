@@ -1,24 +1,26 @@
 #include <EEPROM.h>                 // Safe Positons
-#include "Astro_Motors.h"           // Added .h and .cpp for cleaning
+#include "Astro_Motors.h"           // Added .h and .cpp for cleaning up the code
 #include <DualVNH5019MotorShield.h> // Motor Shield Built-In Library
 
 DualVNH5019MotorShield md;
 
 // ===== Encoder Pins ===== //
-const int pinA                = 2;      // CLK - Interrupt pin (Channel A)
-const int pinB                = 5;      // DT  - Regular digital pin (Channel B)
-volatile int prevA            = LOW;
+const int pinA                    = 3;      // CLK - Interrupt pin (Channel A)
+const int pinB                    = 5;      // DT  - Regular digital pin (Channel B)
+volatile int prevA                = LOW;
 
 // ===== Constants ===== //
-const long SAFE_POS_COUNTS    = 0;      // Encoder count for home/safe zone
-const long HOME_OFFSET_COUNTS = 150;    // Small offset to ensure it's settled
-const long countsPerRev       = 50;     // Adjust for the motor rotaion
-const int m3DownSpeed         = 100;    // Speed for M3 to lower
-const int m3UpSpeed           = 100;    // Speed for M3 to raise
-const int m4Speed             = 100;    // Speed for M4 to move the belt
-const int EEPROM_ADDR_POS     = 0;      // Where encoder count is stored
-const int SAFE_SPEED          = 150;    // Speed to reach home
-volatile long position        = 0;      // Motor Position
+const long SAFE_POS_COUNTS        = 0;      // Encoder count for home/safe zone
+const long HOME_OFFSET_COUNTS     = 150;    // Small offset to ensure it's settled
+const long countsPerRev           = 100;     // Adjust for the motor rotaion
+const int m3DownSpeed             = 100;    // Speed for M3 to lower
+const int m3UpSpeed               = 100;    // Speed for M3 to raise
+const int m4Speed                 = 200;    // Speed for M4 to move the belt
+
+const int EEPROM_ADDR_POS         = 0;      // Where encoder count is stored
+const int SAFE_SPEED              = 150;    // Speed to reach home
+const unsigned long MOTOR_TIMEOUT = 1000;
+volatile long position            = 0;      // Motor Position
 
 
 // ===== REFERENCE SPEED TABLE (-400 to +400, with Duty Percentage) ===== //
@@ -38,13 +40,17 @@ volatile long position        = 0;      // Motor Position
 
 // ===== Function Declarations ===== //
 void updateEncoder();                           // Encoder Interrupt Service Routine
+
+long getPos();
+bool checkMotorFaults();
+
 void savedEncoderPos();                         // Saves The Encoder Position To EEPROM
 long loadEncoderPos();                          // Load The Encoder Position From EEPROM
-void moveM3Down(long targetCount, int speed);   // Move Motor Down (M3)
-void moveM3Up(long targetCount, int speed);     // Move Motor Up (M3)
-void runMotor4Cont(int speed);                  // Run Motor 4 Continuously
+bool moveM3Down(long targetCount, int speed);   // Move Motor Down (M3)
+bool moveM3Up(long targetCount, int speed);     // Move Motor Up (M3)
+void runM4Cont(int speed);                  // Run Motor 4 Continuously
 void stopMotor(int motorNumber);                // Stop Individual Motor        
-void goToSafePos();                             // Returns The Motors To The Safe Position
+bool goToSafePos();                             // Returns The Motors To The Safe Position
 
 // ====== Function Definitions ====== //
 
@@ -52,11 +58,44 @@ void updateEncoder(){
   int currentA = digitalRead(pinA);
   int currentB = digitalRead(pinB);
 
-  if (prevA == LOW && currentA == HIGH){
-    if (currentB == LOW) position++;
-    else position--;
+  // Detect state changes on both edges
+  if (currentA != prevA) {
+    if (currentA == HIGH) {
+      // Rising edge
+      if (currentB == LOW) position++;
+      else position--;
+    } else {
+      // Falling edge
+      if (currentB == HIGH) position++;
+      else position--;
+    }
   }
   prevA = currentA;
+}
+
+long getPos(){
+  noInterrupts();
+  long pos = position;
+  interrupts();
+  return pos;
+}
+
+bool checkMotorFaults(){
+  if (md.getM1Fault()){
+    Serial.println("ERROR: M4 fault detected!");
+    stopMotor(3);
+    stopMotor(4);
+    return true;
+  }
+
+  if (md.getM2Fault()){
+    Serial.println("ERROR: M3 fault detected!");
+    stopMotor(3);
+    stopMotor(4);
+    return true;
+  }
+
+  return false;
 }
 
 void savedEncoderPos(){
@@ -76,73 +115,160 @@ long loadEncoderPos(){
   return savedPos;
 }
 
-void moveM3Down(long targetCount, int speed){
+bool moveM3Down(long targetCount, int speed){
   position = 0;
   md.setM2Speed(-speed);
   Serial.println("M3 Lowering...");
 
-  while (abs(position) < targetCount){
-    Serial.print("Encoder Count: ");
-    Serial.println(position);
+  unsigned long start = millis();
+  unsigned long lastPrint = 0;
+
+  while (abs(getPos()) < targetCount){
+    // Check for timeout
+    if (millis() - start > MOTOR_TIMEOUT){
+      Serial.println("ERROR: M3 timeout!");
+      stopMotor(3);
+      return false;
+    }
+
+    // Check motor falut
+    if (checkMotorFaults()){
+      return false;
+    }
+
+    // Print every 100ms
+    if (millis() - lastPrint > 100){
+      Serial.print("Encoder Count: ");
+      Serial.println(getPos());
+      lastPrint = millis();
+    }
+
     delay(10);
+
   }
 
   stopMotor(3);
   Serial.println("M3 Reached Lower Position.");
+  return true;
 }
 
-void moveM3Up(long targetCount, int speed){
+bool moveM3Up(long targetCount, int speed){
   position = 0;
   md.setM2Speed(speed);
   Serial.println("M3 Raising...");
 
-  while (abs(position) < targetCount){
-    Serial.print("Encoder Count: ");
-    Serial.println(position);
+  unsigned long startTime = millis();
+  unsigned long lastPrintTime = 0;
+
+  while (abs(getPos()) < targetCount){
+    // Check for timeout
+    if (millis() - startTime > MOTOR_TIMEOUT){
+      Serial.println("ERROR: M3 up timeout!");
+      stopMotor(3);
+      return false;
+    }
+
+    // Check for motor faults
+    if (checkMotorFaults()){
+      return false;
+    }
+
+    // Print every 100ms instead of 10ms to reduce spam
+    if (millis() - lastPrintTime > 100){
+      Serial.print("Encoder Count: ");
+      Serial.println(getPos());
+      lastPrintTime = millis();
+    }
+    
     delay(10);
   }
 
   stopMotor(3);
   Serial.println("M3 Returned To Start Position.");
+  return true;
 }
 
 void runM4Cont(int speed){
   md.setM1Speed(speed);
-  Serial.print("Motor 4 Running Continuously At Speed ");
+  Serial.print("Motor 4 running continuously at: ");
   Serial.println(speed);
 }
 
-void stopMotor(int motorNumber){
-  if (motorNumber == 3){
+void stopMotor(int motorNum){
+  if (motorNum == 1){
+    // Add changes for M1
+  } else if (motorNum == 2){
+    // Add chnages for M2
+  } else if (motorNum == 3){
     md.setM2Speed(0);
     savedEncoderPos();
-    Serial.println("Motor 3 Stopped And Position Saved.");
-  } else if (motorNumber == 4){
+    Serial.println("Motor 3 stopped and position saved.");
+  } else if (motorNum == 4){
     md.setM1Speed(0);
-    Serial.println("Motor 4 Stopped.");
+    Serial.println("Motor 4 stopped.");
   } else {
-    Serial.println("Invalid Motor number (For Now), Use Either 3 or 4.");
+    Serial.println("Invalid motor number, use either 1 to 4.");
   }
 }
 
-void goToSafePos(){
-  long savedPos = loadEncoderPos();   // Reads the last saved encoder value
-  position = savedPos;                     // Initialize the position tracking
+bool goToSafePos(){
+  long savedPos = loadEncoderPos();
+  position = savedPos;
 
-  Serial.println("Moving M3 To Safe Position...");
+  Serial.println("Moving M3 to safe position...");
 
-  if (position > SAFE_POS_COUNTS){
+  unsigned long startTime = millis();
+  unsigned long lastPrintTime = 0;
+
+  if (getPos() > SAFE_POS_COUNTS){
     md.setM2Speed(-SAFE_SPEED);
-    while (position > SAFE_POS_COUNTS + HOME_OFFSET_COUNTS){
-      Serial.print("Safe Homing... Encoder: ");
-      Serial.println(position);
+    
+    while (getPos() > SAFE_POS_COUNTS + HOME_OFFSET_COUNTS){
+      // Check for timeout
+      if (millis() - startTime > MOTOR_TIMEOUT) {
+        Serial.println("ERROR: Safe homing timeout!");
+        md.setM2Speed(0);
+        return false;
+      }
+
+      // Check for motor faults
+      if (checkMotorFaults()) {
+        return false;
+      }
+
+      // Print every 100ms to reduce spam
+      if (millis() - lastPrintTime > 100) {
+        Serial.print("Safe Homing... Encoder: ");
+        Serial.println(getPos());
+        lastPrintTime = millis();
+      }
+      
       delay(10);
     }
-  } else if (position < SAFE_POS_COUNTS){
+    
+  } else if (getPos() < SAFE_POS_COUNTS){
     md.setM2Speed(SAFE_SPEED);
-    while (position < SAFE_POS_COUNTS - HOME_OFFSET_COUNTS){
-      Serial.print("Safe Homing... Encoder: ");
-      Serial.println(position);
+    
+    while (getPos() < SAFE_POS_COUNTS - HOME_OFFSET_COUNTS){
+      // Check for timeout
+      if (millis() - startTime > MOTOR_TIMEOUT) {
+        Serial.println("ERROR: Safe homing timeout!");
+        md.setM2Speed(0);
+        return false;
+      }
+
+      // Check for motor faults
+      if (checkMotorFaults()) {
+        return false;
+      }
+
+      // Print every 100ms to reduce spam
+      if (millis() - lastPrintTime > 100) {
+        Serial.print("Safe Homing... Encoder: ");
+        Serial.println(getPos());
+        lastPrintTime = millis();
+      }
+      
       delay(10);
     }
   }
@@ -150,7 +276,8 @@ void goToSafePos(){
   md.setM2Speed(0);
   position = SAFE_POS_COUNTS;
   savedEncoderPos();
-  Serial.println("Gentlemen, We Have landed In The Safe Position");
+  Serial.println("Gentlemen, We Have Landed In The Safe Position");
+  return true;
 }
 
 // ===== Full Sequence in Action ===== //
@@ -162,24 +289,35 @@ void setup(){
   pinMode(pinB, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(pinA), updateEncoder, CHANGE);
 
-  Serial.println("=== Test Sequence: M3 Down, M4 Run,  M3 Up, Stop ===");
+  Serial.println("=== Test Sequence: M3 Down, M4 Run, M3 Up, Stop ===");
   delay(1000);
 }
 
 void loop(){
   // If STOP was entered, it does nothing
-  if (!waitForStart()){
-    Serial.println("SYSTEM IDLE");
-    while (true);  // Freezes "safely"
+  if (!waitForRun()){
+    delay(250);
+    return;
   }
 
-  goToSafePos();
+  if (!goToSafePos()){
+    Serial.println("ERROR: FAiled to reach safe posiiton. Aborting...");
+    while(true);
+  }
+
   delay(1000);
 
   position = 0;  // Reset encoder position
 
   // M3 lowers down
-  moveM3Down(countsPerRev, m3DownSpeed);
+  if (!moveM3Down(countsPerRev, m3DownSpeed)){
+    Serial.println("ERROR: M3 down movement failed. Aborting.");
+    stopMotor(3);
+    stopMotor(4);
+    savedEncoderPos();  // Save position on error
+    while(true);  // Halt on error
+  }
+
   delay(2000);  // 2 sec
 
   // M4 runs continuously for 5 seconds
@@ -189,15 +327,24 @@ void loop(){
   delay(2000);  // 2 sec
 
   // M3 raises back up
-  moveM3Up(countsPerRev, m3UpSpeed);
-  delay(2000);  // 2 sec
+  if (!moveM3Up(countsPerRev, m3UpSpeed)){
+    Serial.println("ERROR: M3 up movement failed. Aborting.");
+    stopMotor(3);
+    stopMotor(4);
+    savedEncoderPos();  // Save position on error
+    while(true);  // Halt on error
+  }
 
+  delay(2000);  // 2 sec
+git a
   // Stop all motors
   stopMotor(3);
   stopMotor(4);
 
+  savedEncoderPos();
+
   Serial.println("=== SEQUENCE COMPLETE ===");
-  while (true);  // Stops program after one full sequence
+  delay(500);
 }
 
 

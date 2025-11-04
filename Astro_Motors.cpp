@@ -29,21 +29,21 @@
 //   return savedPos;
 // }
 
-bool waitForStart(){
-  Serial.println("Press SPACE to activate the sequence or 'S' to abort...");
+bool waitForRun(){
+  clearSerialInput();
+  Serial.println("Press [SPACE] to start or 'S' to stop.");
 
   while (true){
-    if (Serial.available() > 0){  // If something was typed in
-      char key = Serial.read();
+    if (Serial.available() > 0){
+      char input = Serial.read();
 
-      if (key == ' '){
-        Serial.println("STARTING SEQUENCE");
-        return true;  // Continues to main loop
-      } else if (key == 'S' || key == 's'){
-        Serial.println("ABORTING SEQUENCE");
+      if (input == ' '){
+        Serial.println("Starting the sequence...");
+        return true;
+      } else if (input == 'S' || input == 's'){
+        Serial.println("System idle.");
+        delay(5000);
         return false;
-      } else {
-        Serial.println("Invalid input dude, press SPACE to start or 'S' to stop.");
       }
     }
   }
@@ -95,4 +95,10 @@ bool waitForStart(){
 //   savedEncoderPos();
 //   Serial.println("Gentlemen, We Have landed In The Safe Position");
 // }
+
+void clearSerialInput(){
+  while (Serial.available() > 0){
+    Serial.read();
+  }
+}
 
