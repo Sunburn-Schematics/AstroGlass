@@ -40,15 +40,12 @@ volatile long position            = 0;      // Motor Position
 
 // ===== Function Declarations ===== //
 void updateEncoder();                           // Encoder Interrupt Service Routine
-
-long getPos();
-bool checkMotorFaults();
-
+bool checkMotorFaults();                        // Checks if any motors are faulty
 void savedEncoderPos();                         // Saves The Encoder Position To EEPROM
 long loadEncoderPos();                          // Load The Encoder Position From EEPROM
 bool moveM3Down(long targetCount, int speed);   // Move Motor Down (M3)
 bool moveM3Up(long targetCount, int speed);     // Move Motor Up (M3)
-void runM4Cont(int speed);                  // Run Motor 4 Continuously
+void runM4Cont(int speed);                      // Run Motor 4 Continuously
 void stopMotor(int motorNumber);                // Stop Individual Motor        
 bool goToSafePos();                             // Returns The Motors To The Safe Position
 
@@ -73,13 +70,6 @@ void updateEncoder(){
   prevA = currentA;
 }
 
-long getPos(){
-  noInterrupts();
-  long pos = position;
-  interrupts();
-  return pos;
-}
-
 bool checkMotorFaults(){
   if (md.getM1Fault()){
     Serial.println("ERROR: M4 fault detected!");
@@ -94,7 +84,6 @@ bool checkMotorFaults(){
     stopMotor(4);
     return true;
   }
-
   return false;
 }
 
@@ -123,7 +112,7 @@ bool moveM3Down(long targetCount, int speed){
   unsigned long start = millis();
   unsigned long lastPrint = 0;
 
-  while (abs(getPos()) < targetCount){
+  while (abs(getPosition()) < targetCount){
     // Check for timeout
     if (millis() - start > MOTOR_TIMEOUT){
       Serial.println("ERROR: M3 timeout!");
@@ -139,12 +128,10 @@ bool moveM3Down(long targetCount, int speed){
     // Print every 100ms
     if (millis() - lastPrint > 100){
       Serial.print("Encoder Count: ");
-      Serial.println(getPos());
+      Serial.println(getPosition());
       lastPrint = millis();
     }
-
     delay(10);
-
   }
 
   stopMotor(3);
@@ -160,7 +147,7 @@ bool moveM3Up(long targetCount, int speed){
   unsigned long startTime = millis();
   unsigned long lastPrintTime = 0;
 
-  while (abs(getPos()) < targetCount){
+  while (abs(getPosition()) < targetCount){
     // Check for timeout
     if (millis() - startTime > MOTOR_TIMEOUT){
       Serial.println("ERROR: M3 up timeout!");
@@ -176,10 +163,9 @@ bool moveM3Up(long targetCount, int speed){
     // Print every 100ms instead of 10ms to reduce spam
     if (millis() - lastPrintTime > 100){
       Serial.print("Encoder Count: ");
-      Serial.println(getPos());
+      Serial.println(getPosition());
       lastPrintTime = millis();
     }
-    
     delay(10);
   }
 
@@ -220,55 +206,53 @@ bool goToSafePos(){
   unsigned long startTime = millis();
   unsigned long lastPrintTime = 0;
 
-  if (getPos() > SAFE_POS_COUNTS){
+  if (getPosition() > SAFE_POS_COUNTS){
     md.setM2Speed(-SAFE_SPEED);
     
-    while (getPos() > SAFE_POS_COUNTS + HOME_OFFSET_COUNTS){
+    while (getPosition() > SAFE_POS_COUNTS + HOME_OFFSET_COUNTS){
       // Check for timeout
-      if (millis() - startTime > MOTOR_TIMEOUT) {
+      if (millis() - startTime > MOTOR_TIMEOUT){
         Serial.println("ERROR: Safe homing timeout!");
         md.setM2Speed(0);
         return false;
       }
 
       // Check for motor faults
-      if (checkMotorFaults()) {
+      if (checkMotorFaults()){
         return false;
       }
 
       // Print every 100ms to reduce spam
-      if (millis() - lastPrintTime > 100) {
+      if (millis() - lastPrintTime > 100){
         Serial.print("Safe Homing... Encoder: ");
-        Serial.println(getPos());
+        Serial.println(getPosition());
         lastPrintTime = millis();
       }
-      
       delay(10);
     }
     
-  } else if (getPos() < SAFE_POS_COUNTS){
+  } else if (getPosition() < SAFE_POS_COUNTS){
     md.setM2Speed(SAFE_SPEED);
     
-    while (getPos() < SAFE_POS_COUNTS - HOME_OFFSET_COUNTS){
+    while (getPosition() < SAFE_POS_COUNTS - HOME_OFFSET_COUNTS){
       // Check for timeout
-      if (millis() - startTime > MOTOR_TIMEOUT) {
+      if (millis() - startTime > MOTOR_TIMEOUT){
         Serial.println("ERROR: Safe homing timeout!");
         md.setM2Speed(0);
         return false;
       }
 
       // Check for motor faults
-      if (checkMotorFaults()) {
+      if (checkMotorFaults()){
         return false;
       }
 
       // Print every 100ms to reduce spam
-      if (millis() - lastPrintTime > 100) {
-        Serial.print("Safe Homing... Encoder: ");
-        Serial.println(getPos());
+      if (millis() - lastPrintTime > 100){
+        Serial.print("Safe Homing. Encoder Count: ");
+        Serial.println(getPosition());
         lastPrintTime = millis();
       }
-      
       delay(10);
     }
   }
@@ -336,7 +320,7 @@ void loop(){
   }
 
   delay(2000);  // 2 sec
-git a
+
   // Stop all motors
   stopMotor(3);
   stopMotor(4);
@@ -356,6 +340,4 @@ Updating GITHUB:
   - git commit -m "Enter any comments"
   - git push
 */
-
-
 

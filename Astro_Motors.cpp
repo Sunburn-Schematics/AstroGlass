@@ -29,6 +29,8 @@
 //   return savedPos;
 // }
 
+
+
 bool waitForRun(){
   clearSerialInput();
   Serial.println("Press [SPACE] to start or 'S' to stop.");
@@ -101,4 +103,3 @@ void clearSerialInput(){
     Serial.read();
   }
 }
-
