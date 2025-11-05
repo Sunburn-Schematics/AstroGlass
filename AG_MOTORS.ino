@@ -43,11 +43,14 @@ void updateEncoder();                           // Encoder Interrupt Service Rou
 bool checkMotorFaults();                        // Checks if any motors are faulty
 void savedEncoderPos();                         // Saves The Encoder Position To EEPROM
 long loadEncoderPos();                          // Load The Encoder Position From EEPROM
+long getPosition();                             // 
+bool waitForRun();                              // Waits for input activation, then asks after sequence
 bool moveM3Down(long targetCount, int speed);   // Move Motor Down (M3)
 bool moveM3Up(long targetCount, int speed);     // Move Motor Up (M3)
 void runM4Cont(int speed);                      // Run Motor 4 Continuously
 void stopMotor(int motorNumber);                // Stop Individual Motor        
 bool goToSafePos();                             // Returns The Motors To The Safe Position
+void clearSerialInput();                        // Clears the serial input
 
 // ====== Function Definitions ====== //
 
@@ -102,6 +105,33 @@ long loadEncoderPos(){
   Serial.print("Loaded Encoder Position from EEPROM: ");
   Serial.println(savedPos);
   return savedPos;
+}
+
+long getPosition(){
+  noInterrupts();   // Stops all interrupts temporarily
+  long pos = position;  // Safely read the value
+  interrupts();   // Re-enable interrupts
+  return pos;
+}
+
+bool waitForRun(){
+  clearSerialInput();
+  Serial.println("Press [SPACE] to start or 'S' to stop.");
+
+  while (true){
+    if (Serial.available() > 0){
+      char input = Serial.read();
+
+      if (input == ' '){
+        Serial.println("Starting the sequence...");
+        return true;
+      } else if (input == 'S' || input == 's'){
+        Serial.println("System idle.");
+        delay(5000);
+        return false;
+      }
+    }
+  }
 }
 
 bool moveM3Down(long targetCount, int speed){
@@ -262,6 +292,12 @@ bool goToSafePos(){
   savedEncoderPos();
   Serial.println("Gentlemen, We Have Landed In The Safe Position");
   return true;
+}
+
+void clearSerialInput(){
+  while (Serial.available() > 0){
+    Serial.read();
+  }
 }
 
 // ===== Full Sequence in Action ===== //

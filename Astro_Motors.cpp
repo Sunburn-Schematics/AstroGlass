@@ -29,27 +29,32 @@
 //   return savedPos;
 // }
 
+// long getPosition(){
+//   noInterrupts();   // Stops all interrupts temporarily
+//   long pos = position;  // Safely read the value
+//   interrupts();   // Re-enable interrupts
+//   return pos;
+// }
 
+// bool waitForRun(){
+//   clearSerialInput();
+//   Serial.println("Press [SPACE] to start or 'S' to stop.");
 
-bool waitForRun(){
-  clearSerialInput();
-  Serial.println("Press [SPACE] to start or 'S' to stop.");
+//   while (true){
+//     if (Serial.available() > 0){
+//       char input = Serial.read();
 
-  while (true){
-    if (Serial.available() > 0){
-      char input = Serial.read();
-
-      if (input == ' '){
-        Serial.println("Starting the sequence...");
-        return true;
-      } else if (input == 'S' || input == 's'){
-        Serial.println("System idle.");
-        delay(5000);
-        return false;
-      }
-    }
-  }
-}
+//       if (input == ' '){
+//         Serial.println("Starting the sequence...");
+//         return true;
+//       } else if (input == 'S' || input == 's'){
+//         Serial.println("System idle.");
+//         delay(5000);
+//         return false;
+//       }
+//     }
+//   }
+// }
 
 // void runM4Cont(int speed){
 //   md.setM1Speed(speed);
@@ -98,8 +103,8 @@ bool waitForRun(){
 //   Serial.println("Gentlemen, We Have landed In The Safe Position");
 // }
 
-void clearSerialInput(){
-  while (Serial.available() > 0){
-    Serial.read();
-  }
-}
+// void clearSerialInput(){
+//   while (Serial.available() > 0){
+//     Serial.read();
+//   }
+// }
