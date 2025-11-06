@@ -1,110 +1,267 @@
 #include "Astro_Motors.h"
-#include <EEPROM.h>
 
-// void updateEncoder(){
-//   int currentA = digitalRead(pinA);
-//   int currentB = digitalRead(pinB);
+// ===== HARDWARE CONFIGURATION ===== //
+const int pinA = 3;                       // CLK - Interrupt pin (Channel A)
+const int pinB = 5;                       // DT  - Regular digital pin (Channel B)
+volatile int prevA = LOW;
 
-//   if (prevA == LOW && currentA == HIGH){
-//     if (currentB == LOW) position++;
-//     else position--;
-//   }
-//   prevA = currentA;
-// }
+// ===== ENCODER & MOTOR PARAMETERS ===== //
+const long SAFE_POS_COUNTS = 0;           // Encoder count for home/safe zone
+const long countsPerRev = 854;            // Maverick: 7 PPR × 2 edges × 61:1 gear
+const long CONST_90_DEG = 214;            // 90-degree movement (1/4 revolution)
 
-// void savedEncoderPos(){
-//   noInterrupts();
-//   long tempPos = position;
-//   interrupts();
-//   EEPROM.put(EEPROM_ADDR_POS, tempPos);
-//   Serial.print("Saved Encoder Position to EEPROM: ");
-//   Serial.println(tempPos);
-// }
+// ===== MOTOR SPEEDS ===== //
+const int m3DownSpeed = 100;              // Speed for M3 to lower
+const int m3UpSpeed = 100;                // Speed for M3 to raise
+const int m4Speed = 200;                  // Speed for M4 belt movement
+const int SAFE_SPEED = 150;               // Speed to reach home position
 
-// long loadEncoderPos(){
-//   long savedPos;
-//   EEPROM.get(EEPROM_ADDR_POS, savedPos);
-//   Serial.print("Loaded Encoder Position from EEPROM: ");
-//   Serial.println(savedPos);
-//   return savedPos;
-// }
+// ===== TIMING PARAMETERS ===== //
+const unsigned long MOTOR_TIMEOUT_MOVE = 5000;    // 5 seconds for normal moves
+const unsigned long MOTOR_TIMEOUT_HOME = 15000;   // 15 seconds for homing
+const unsigned long DELAY_AFTER_DOWN = 2000;      // 2 seconds
+const unsigned long M4_RUN_TIME = 3000;           // 3 seconds
+const unsigned long DELAY_AFTER_M4 = 2000;        // 2 seconds
+const unsigned long DELAY_AFTER_UP = 2000;        // 2 seconds
+const unsigned long SEQUENCE_PAUSE = 500;         // 0.5 seconds
 
-// long getPosition(){
-//   noInterrupts();   // Stops all interrupts temporarily
-//   long pos = position;  // Safely read the value
-//   interrupts();   // Re-enable interrupts
-//   return pos;
-// }
+// ===== EEPROM CONFIGURATION ===== //
+const int EEPROM_ADDR_POS = 0;            // Where encoder count is stored
 
-// bool waitForRun(){
-//   clearSerialInput();
-//   Serial.println("Press [SPACE] to start or 'S' to stop.");
+// ===== MOTOR POSITION ===== //
+volatile long position = 0;               // Current motor position
 
-//   while (true){
-//     if (Serial.available() > 0){
-//       char input = Serial.read();
+// ===== MOTOR SHIELD ===== //
+DualVNH5019MotorShield md;
 
-//       if (input == ' '){
-//         Serial.println("Starting the sequence...");
-//         return true;
-//       } else if (input == 'S' || input == 's'){
-//         Serial.println("System idle.");
-//         delay(5000);
-//         return false;
-//       }
-//     }
-//   }
-// }
+// ===== FUNCTION IMPLEMENTATIONS ===== //
 
-// void runM4Cont(int speed){
-//   md.setM1Speed(speed);
-//   Serial.print("Motor 4 Running Continuously At Speed ");
-//   Serial.println(speed);
-// }
+void initializeMotors() {
+  md.init();
+  pinMode(pinA, INPUT_PULLUP);
+  pinMode(pinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(pinA), updateEncoder, CHANGE);
+}
 
-// void stopMotor(int motorNumber){
-//   if (motorNumber == 3){
-//     md.setM2Speed(0);
-//     savedEncoderPos();
-//     Serial.println("Motor 3 Stopped And Position Saved.");
-//   } else if (motorNumber == 4){
-//     md.setM1Speed(0);
-//     Serial.println("Motor 4 Stopped.");
-//   } else {
-//     Serial.println("Invalid Motor number (For Now), Use Either 3 or 4.");
-//   }
-// }
+void updateEncoder() {
+  int currentA = digitalRead(pinA);
+  int currentB = digitalRead(pinB);
 
-// void goToSafePos(){
-//   long savedPos = loadEncoderPos();   // Reads the last saved encoder value
-//   position = savedPos;                     // Initialize the position tracking
+  if (currentA != prevA) {
+    if (currentA == HIGH) {
+      if (currentB == LOW) position++;
+      else position--;
+    } else {
+      if (currentB == HIGH) position++;
+      else position--;
+    }
+  }
+  prevA = currentA;
+}
 
-//   Serial.println("Moving M3 To Safe Position...");
+bool checkMotorFaults() {
+  if (md.getM1Fault()) {
+    Serial.println("ERROR: M4 fault detected!");
+    stopMotor(Motor::M3);
+    stopMotor(Motor::M4);
+    return true;
+  }
 
-//   if (position > SAFE_POS_COUNTS){
-//     md.setM2Speed(-SAFE_SPEED);
-//     while (position > SAFE_POS_COUNTS + HOME_OFFSET_COUNTS){
-//       Serial.print("Safe Homing... Encoder: ");
-//       Serial.println(position);
-//       delay(10);
-//     }
-//   } else if (position < SAFE_POS_COUNTS){
-//     md.setM2Speed(SAFE_SPEED);
-//     while (position < SAFE_POS_COUNTS - HOME_OFFSET_COUNTS){
-//       Serial.print("Safe Homing... Encoder: ");
-//       Serial.println(position);
-//       delay(10);
-//     }
-//   }
+  if (md.getM2Fault()) {
+    Serial.println("ERROR: M3 fault detected!");
+    stopMotor(Motor::M3);
+    stopMotor(Motor::M4);
+    return true;
+  }
+  return false;
+}
 
-//   md.setM2Speed(0);
-//   position = SAFE_POS_COUNTS;
-//   savedEncoderPos();
-//   Serial.println("Gentlemen, We Have landed In The Safe Position");
-// }
+void savedEncoderPos() {
+  noInterrupts();
+  long tempPos = position;
+  interrupts();
+  EEPROM.put(EEPROM_ADDR_POS, tempPos);
+  Serial.print("Saved Encoder Position to EEPROM: ");
+  Serial.println(tempPos);
+}
 
-// void clearSerialInput(){
-//   while (Serial.available() > 0){
-//     Serial.read();
-//   }
-// }
+long loadEncoderPos() {
+  long savedPos;
+  EEPROM.get(EEPROM_ADDR_POS, savedPos);
+  Serial.print("Loaded Encoder Position from EEPROM: ");
+  Serial.println(savedPos);
+  return savedPos;
+}
+
+long getPosition() {
+  noInterrupts();
+  long pos = position;
+  interrupts();
+  return pos;
+}
+
+bool waitForRun() {
+  clearSerialInput();
+  Serial.println("Press [SPACE] to start or 'S' to stop.");
+
+  while (true) {
+    if (Serial.available() > 0) {
+      char input = Serial.read();
+
+      if (input == ' ') {
+        Serial.println("Starting the sequence...");
+        return true;
+      } else if (input == 'S' || input == 's') {
+        Serial.println("System idle.");
+        delay(5000);
+        return false;
+      }
+    }
+  }
+}
+
+bool moveM3ToPos(long targetCount, int speed, const char* direction) {
+  position = 0;
+  md.setM2Speed(speed);
+  Serial.print("M3 ");
+  Serial.print(direction);
+  Serial.println("...");
+
+  unsigned long startTime = millis();
+  unsigned long lastPrintTime = 0;
+
+  while (abs(getPosition()) < targetCount) {
+    if (millis() - startTime > MOTOR_TIMEOUT_MOVE) {
+      Serial.print("ERROR: M3 ");
+      Serial.print(direction);
+      Serial.println(" timeout!");
+      stopMotor(Motor::M3);
+      return false;
+    }
+
+    if (checkMotorFaults()) {
+      return false;
+    }
+
+    if (millis() - lastPrintTime > 100) {
+      Serial.print("Encoder Count: ");
+      Serial.println(getPosition());
+      lastPrintTime = millis();
+    }
+    delay(10);
+  }
+
+  stopMotor(Motor::M3);
+  Serial.print("M3 ");
+  Serial.print(direction);
+  Serial.println(" complete.");
+  return true;
+}
+
+void runM4Cont(int speed) {
+  md.setM1Speed(speed);
+  Serial.print("Motor 4 running continuously at: ");
+  Serial.println(speed);
+}
+
+void stopMotor(int motorNum) {
+  if (motorNum == Motor::M1) {
+    // Add changes for M1
+  } else if (motorNum == Motor::M2) {
+    // Add changes for M2
+  } else if (motorNum == Motor::M3) {
+    md.setM2Speed(0);
+    savedEncoderPos();
+    Serial.println("Motor 3 stopped and position saved.");
+  } else if (motorNum == Motor::M4) {
+    md.setM1Speed(0);
+    Serial.println("Motor 4 stopped.");
+  } else {
+    Serial.println("Invalid motor number, use either 1 to 4.");
+  }
+}
+
+bool goToSafePos() {
+  long savedPos = loadEncoderPos();
+  position = savedPos;
+
+  Serial.println("Moving M3 to safe position...");
+
+  unsigned long startTime = millis();
+  unsigned long lastPrintTime = 0;
+
+  if (getPosition() > SAFE_POS_COUNTS) {
+    md.setM2Speed(SAFE_SPEED);
+    
+    while (getPosition() > SAFE_POS_COUNTS) {
+      if (millis() - startTime > MOTOR_TIMEOUT_HOME) {
+        Serial.println("ERROR: Safe homing timeout!");
+        md.setM2Speed(0);
+        return false;
+      }
+
+      if (checkMotorFaults()) {
+        return false;
+      }
+
+      if (millis() - lastPrintTime > 100) {
+        Serial.print("Safe Homing... Encoder: ");
+        Serial.println(getPosition());
+        lastPrintTime = millis();
+      }
+      delay(10);
+    }
+    
+  } else if (getPosition() < SAFE_POS_COUNTS) {
+    md.setM2Speed(-SAFE_SPEED);
+    
+    while (getPosition() < SAFE_POS_COUNTS) {
+      if (millis() - startTime > MOTOR_TIMEOUT_HOME) {
+        Serial.println("ERROR: Safe homing timeout!");
+        md.setM2Speed(0);
+        return false;
+      }
+
+      if (checkMotorFaults()) {
+        return false;
+      }
+
+      if (millis() - lastPrintTime > 100) {
+        Serial.print("Safe Homing. Encoder Count: ");
+        Serial.println(getPosition());
+        lastPrintTime = millis();
+      }
+      delay(10);
+    }
+  }
+
+  md.setM2Speed(0);
+  position = SAFE_POS_COUNTS;
+  savedEncoderPos();
+  Serial.println("Gentlemen, We Have Landed In The Safe Position");
+  return true;
+}
+
+void emergencyStop() {
+  Serial.println("!! EMERGENCY STOP - RETURNING TO SAFE POSITION !!");
+
+  md.setM2Speed(0);
+  md.setM1Speed(0);
+
+  delay(500);
+
+  if (goToSafePos()) {
+    Serial.println("Successfully returned to safe position.");
+  } else {
+    Serial.println("WARNING: Could not return to safe position!");
+  }
+
+  Serial.println("System halted. Please reset to continue.");
+  while(true);
+}
+
+void clearSerialInput() {
+  while (Serial.available() > 0) {
+    Serial.read();
+  }
+}
