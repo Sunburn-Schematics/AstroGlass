@@ -45,21 +45,21 @@ enum Motor {
 };
 
 // ===== MOTOR SHIELD ===== //
-extern DualVNH5019MotorShield md;
+extern DualVNH5019MotorShield md_main;
 
 // ===== FUNCTION DECLARATIONS ===== //
-void initializeMotors();                                        // Initialize motor system
-void updateEncoder();                                           // Encoder ISR
-bool checkMotorFaults();                                        // Check for motor faults
-void savedEncoderPos();                                         // Save encoder position to EEPROM
-long loadEncoderPos();                                          // Load encoder position from EEPROM
-long getPosition();                                             // Get current encoder position safely
-bool waitForRun();                                              // Wait for user input to start
-bool moveM3ToPos(long targetCount, int speed, const char* direction);  // Move M3 motor
-void runM4Cont(int speed);                                      // Run M4 continuously
-void stopMotor(int motorNumber);                                // Stop individual motor
-bool goToSafePos();                                             // Return to safe position
-void emergencyStop();                                           // Emergency stop procedure
-void clearSerialInput();                                        // Clear serial buffer
+void initializeMotors();                                                // Initialize motor system
+void updateEncoder();                                                   // Encoder ISR
+bool checkMotorFaults();                                                // Check for motor faults
+void savedEncoderPos();                                                 // Save encoder position to EEPROM
+long loadEncoderPos();                                                  // Load encoder position from EEPROM
+long getPosition();                                                     // Get current encoder position safely
+bool waitForRun();                                                      // Wait for user input to start
+bool moveM3ToPos(long targetCount, int speed, const char* direction);   // Move M3 motor
+void runM4Cont(int speed);                                              // Run M4 continuously
+void stopMotor(int motorNumber);                                        // Stop individual motor
+bool goToSafePos();                                                     // Return to safe position
+void emergencyStop();                                                   // Emergency stop procedure
+void clearSerialInput();                                                // Clear serial buffer
 
 #endif

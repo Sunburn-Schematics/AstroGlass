@@ -15,7 +15,7 @@
    400: Full Forward      (100%)
 */
 
-void setup() {
+void setup(){
   Serial.begin(115200);
   initializeMotors();
 
@@ -24,13 +24,13 @@ void setup() {
   long currPos = loadEncoderPos();
   position = currPos;
 
-  if (getPosition() < SAFE_POS_COUNTS) {
+  if (getPosition() < SAFE_POS_COUNTS){
     Serial.println("Belt below safe position - raising to safe position...");
-    if (!goToSafePos()) {
+    if (!goToSafePos()){
       Serial.println("ERROR: Failed to reach the safe position. Aborting...");
       while(true);
     }
-  } else if (getPosition() > SAFE_POS_COUNTS) {
+  } else if (getPosition() > SAFE_POS_COUNTS){
     Serial.println("WARNING: Belt is above safe position!");
     Serial.println("Manually lower belt to safe position and press RESET.");
     while(true);
@@ -41,19 +41,17 @@ void setup() {
   delay(1000);
 }
 
-void loop() {
-  if (!waitForRun()) {
+void loop(){
+  if (!waitForRun()){
     delay(250);
     return;
   }
-
   position = 0;
 
   // M3 lowers down
-  if (!moveM3ToPos(CONST_90_DEG, -m3DownSpeed, "Lowering")) {
+  if (!moveM3ToPos(CONST_90_DEG, -m3DownSpeed, "Lowering")){
     emergencyStop();
   }
-
   delay(DELAY_AFTER_DOWN);
 
   // M4 runs continuously
@@ -63,10 +61,9 @@ void loop() {
   delay(DELAY_AFTER_M4);
 
   // M3 raises back up
-  if (!moveM3ToPos(CONST_90_DEG, m3UpSpeed, "Raising")) {
+  if (!moveM3ToPos(CONST_90_DEG, m3UpSpeed, "Raising")){
     emergencyStop();
   }
-
   delay(DELAY_AFTER_UP);
 
   // Stop all motors
