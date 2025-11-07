@@ -1,3 +1,18 @@
+/**
+Astro_Motors.cpp - Implementation File for AstroGlass/Sunburn's Motors
+
+To make it simple, (for me), the header file declares all constants, variables, and functions used in to motor control 
+system. It provides the interface between both the main program and the motor control implementation.
+
+Motor Assignments:
+  M1 - Plunger
+  M2 - Platform
+  M3 - Conveyor Lift
+  M4 - Belt
+[Motors used: 4x Studia Maverick 7 PPR with a 61:1 gear ratio (854 per revolution)]
+[Motor Drivers used: 2x DualVNH5019 Motor Shield]
+*/
+
 #include "Astro_Motors.h"
 
 // ===== HARDWARE CONFIGURATION ===== //

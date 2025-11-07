@@ -2,7 +2,7 @@
 
 Author: Pedro Ortiz
 
-Last Update: 11/06/2025 at 1:46p
+Last Update: 11/07/2025 at 12:55p
 
 AG_MOTORS.ino has the current and up-to-date Arduino code that is in control of making 
 the individual motors move for FRRED (Freeform Robotic Regolith Device).

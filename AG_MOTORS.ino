@@ -41,6 +41,10 @@ void setup(){
   delay(1000);
 }
 
+
+// === ADD STATE MACHINE === //
+
+
 void loop(){
   if (!waitForRun()){
     delay(250);
