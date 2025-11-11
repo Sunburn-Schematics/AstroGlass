@@ -15,9 +15,22 @@ Motor Assignments:
 
 #include "Astro_Motors.h"
 
+// ===== SPEED REFERENCE TABLE (-400 to +400) ===== //
+/*
+  -400: Full Reverse      (100%)
+  -300: High Reverse      (75%)
+  -200: Medium Reverse    (50%)
+  -100: Slow Reverse      (25%)
+     0: Stopped           (0%)
+   100: Slow Forward      (25%)
+   200: Medium Forward    (50%)
+   300: High Forward      (75%)
+   400: Full Forward      (100%)
+*/
+
 // ===== HARDWARE CONFIGURATION ===== //
-const int pinA = 2;                       // CLK - Interrupt 0 (Channel A)
-const int pinB = 3;                       // DT  - Interrupt 1 (Channel B)
+const int pinA = 18;                       // CLK - Interrupt 0 (Channel A)
+const int pinB = 19;                       // DT  - Interrupt 1 (Channel B)
 volatile int prevA = LOW;
 
 // ===== ENCODER & MOTOR PARAMETERS ===== //
@@ -32,8 +45,8 @@ const int m4Speed = 200;                  // M4 speed
 const int SAFE_SPEED = 150;               // Speed to reach home position
 
 // ===== TIMING PARAMETERS ===== //
-const unsigned long MOTOR_TIMEOUT_MOVE = 5000;        // 5 seconds for normal moves
-const unsigned long MOTOR_TIMEOUT_HOME = 15000;       // 15 seconds for homing
+const unsigned long MOTOR_TIMEOUT_MOVE = 15000;       // 15 seconds for normal moves
+const unsigned long MOTOR_TIMEOUT_HOME = 30000;       // 30 seconds for homing
 const unsigned long DELAY_AFTER_DOWN   = 2000;        // 2 seconds
 const unsigned long M4_RUN_TIME        = 3000;        // 3 seconds
 const unsigned long DELAY_AFTER_M4     = 2000;        // 2 seconds
@@ -220,8 +233,8 @@ bool goToSafePos(){
       }
 
       if (millis() - lastPrintTime > 100){
-        Serial.print("Safe Homing... Encoder: ");
-        Serial.println(getPosition());
+        // Serial.print("Safe Homing... Encoder: ");
+        // Serial.println(getPosition());
         lastPrintTime = millis();
       }
       delay(10);
@@ -242,8 +255,8 @@ bool goToSafePos(){
       }
 
       if (millis() - lastPrintTime > 100){
-        Serial.print("Safe Homing. Encoder Count: ");
-        Serial.println(getPosition());
+        // Serial.print("Safe Homing. Encoder Count: ");
+        // Serial.println(getPosition());
         lastPrintTime = millis();
       }
       delay(10);

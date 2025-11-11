@@ -2,89 +2,156 @@
 #include "Astro_Motors.h"
 #include <DualVNH5019MotorShield.h>
 
-// ===== SPEED REFERENCE TABLE (-400 to +400) ===== //
-/*
-  -400: Full Reverse      (100%)
-  -300: High Reverse      (75%)
-  -200: Medium Reverse    (50%)
-  -100: Slow Reverse      (25%)
-     0: Stopped           (0%)
-   100: Slow Forward      (25%)
-   200: Medium Forward    (50%)
-   300: High Forward      (75%)
-   400: Full Forward      (100%)
-*/
-
-void setup(){
+void setup() {
   Serial.begin(115200);
+  delay(500);
+  
+  // Initialize motor shield and encoder
   initializeMotors();
 
-  Serial.println("=== Test Sequence: M3 Down, M4 Run, M3 Up, Stop ===");
+  Serial.println("AstroGlass Motor Control System");
+  Serial.println("Initializing...");
+  Serial.println("");
   
-  long currPos = loadEncoderPos();
-  position = currPos;
-
-  if (getPosition() < SAFE_POS_COUNTS){
-    Serial.println("Belt below safe position - raising to safe position...");
-    if (!goToSafePos()){
-      Serial.println("ERROR: Failed to reach the safe position. Aborting...");
-      while(true);
-    }
-  } else if (getPosition() > SAFE_POS_COUNTS){
-    Serial.println("WARNING: Belt is above safe position!");
-    Serial.println("Manually lower belt to safe position and press RESET.");
-    while(true);
-  } else {
-    Serial.println("Already in safe position");
-  }
+  // Clear EEPROM and reset position on every boot
+  Serial.println("Resetting EEPROM to 0...");
+  position = 0;
+  EEPROM.put(EEPROM_ADDR_POS, position);
+  Serial.println("EEPROM cleared.");
+  Serial.println("");
   
-  delay(1000);
+  Serial.println("System Ready");
+  Serial.println("Encoder on Pins 18 & 19");
+  Serial.println("Position reset to 0");
+  Serial.println("");
+  Serial.println("IMPORTANT: Ensure M3 is at safe position (UP) before running.");
+  Serial.println("");
+  
+  delay(2000);
 }
 
-
-// === ADD STATE MACHINE === //
-
-
-void loop(){
-  if (!waitForRun()){
+void loop() {
+  // Wait for user to press SPACE to start
+  if (!waitForRun()) {
     delay(250);
     return;
   }
+  
+  // Force encoder position to 0 at start of every sequence
   position = 0;
+  
+  Serial.println("");
+  Serial.println("Starting Sequence...");
+  Serial.println("");
+  Serial.print("Initial position: ");
+  Serial.println(getPosition());
+  Serial.println("");
 
-  // M3 lowers down
-  if (!moveM3ToPos(CONST_90_DEG, -m3DownSpeed, "Lowering")){
-    emergencyStop();
+  // STEP 1: Lower M3 conveyor 90 degrees
+  Serial.println("STEP 1: Lowering M3 (target: 214 counts)...");
+  
+  md_main.setM2Speed(-m3DownSpeed);
+  unsigned long startTime = millis();
+  unsigned long lastPrint = 0;
+  
+  // Wait until encoder reaches target count
+  while (abs(getPosition()) < CONST_90_DEG) {
+    // Check for timeout
+    if (millis() - startTime > MOTOR_TIMEOUT_MOVE) {
+      Serial.println("");
+      Serial.println("ERROR: M3 lowering timeout!");
+      Serial.print("Reached: ");
+      Serial.print(getPosition());
+      Serial.print(" / Target: ");
+      Serial.println(CONST_90_DEG);
+      Serial.println("");
+      Serial.println("Problem: Encoder not counting or motor not moving.");
+      Serial.println("Check wiring and run MOTOR_ENCODER_TEST.");
+      md_main.setM2Speed(0);
+      while(true);  // Halt
+    }
+    
+    // Print progress every 200ms
+    if (millis() - lastPrint > 200) {
+      Serial.print("  Count: ");
+      Serial.println(getPosition());
+      lastPrint = millis();
+    }
+    
+    delay(10);
   }
+  
+  // Stop motor
+  md_main.setM2Speed(0);
+  Serial.println("");
+  Serial.print("M3 lowering complete. Final count: ");
+  Serial.println(getPosition());
+  Serial.println("");
   delay(DELAY_AFTER_DOWN);
 
-  // M4 runs continuously
-  runM4Cont(m4Speed);
+  // STEP 2: Run M4 belt motor
+  Serial.println("STEP 2: Running M4 belt...");
+  md_main.setM1Speed(m4Speed);
   delay(M4_RUN_TIME);
-  stopMotor(Motor::M4);
+  md_main.setM1Speed(0);
+  Serial.println("M4 stopped.");
+  Serial.println("");
   delay(DELAY_AFTER_M4);
 
-  // M3 raises back up
-  if (!moveM3ToPos(CONST_90_DEG, m3UpSpeed, "Raising")){
-    emergencyStop();
+  // STEP 3: Raise M3 conveyor 90 degrees
+  Serial.println("STEP 3: Raising M3 (target: 214 counts)...");
+  
+  // Reset encoder for relative movement
+  position = 0;
+  
+  md_main.setM2Speed(m3UpSpeed);
+  startTime = millis();
+  lastPrint = 0;
+  
+  // Wait until encoder reaches target count
+  while (abs(getPosition()) < CONST_90_DEG) {
+    // Check for timeout
+    if (millis() - startTime > MOTOR_TIMEOUT_MOVE) {
+      Serial.println("");
+      Serial.println("ERROR: M3 raising timeout!");
+      Serial.print("Reached: ");
+      Serial.print(getPosition());
+      Serial.print(" / Target: ");
+      Serial.println(CONST_90_DEG);
+      md_main.setM2Speed(0);
+      while(true);  // Halt
+    }
+    
+    // Print progress every 200ms
+    if (millis() - lastPrint > 200) {
+      Serial.print("  Count: ");
+      Serial.println(getPosition());
+      lastPrint = millis();
+    }
+    
+    delay(10);
   }
+  
+  // Stop motor
+  md_main.setM2Speed(0);
+  Serial.println("");
+  Serial.print("M3 raising complete. Final count: ");
+  Serial.println(getPosition());
+  Serial.println("");
   delay(DELAY_AFTER_UP);
 
-  // Stop all motors
-  stopMotor(Motor::M3);
-  stopMotor(Motor::M4);
-
-  savedEncoderPos();
-
-  Serial.println("=== SEQUENCE COMPLETE ===");
+  // Stop all motors and save position
+  md_main.setM2Speed(0);
+  md_main.setM1Speed(0);
+  
+  // Reset encoder and save to EEPROM
+  position = 0;
+  EEPROM.put(EEPROM_ADDR_POS, position);
+  
+  Serial.println("Sequence Complete");
+  Serial.println("Encoder reset to 0 and saved.");
+  Serial.println("Ready for next cycle.");
+  Serial.println("");
+  
   delay(SEQUENCE_PAUSE);
 }
-
-// FOR PERSONAL //
-/*
-Updating GITHUB:
-  - git status
-  - git add .
-  - git commit -m "Enter any comments"
-  - git push
-*/
