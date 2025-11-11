@@ -29,20 +29,20 @@ Motor Assignments:
 */
 
 // ===== HARDWARE CONFIGURATION ===== //
-const int pinA = 18;                       // CLK - Interrupt 0 (Channel A)
-const int pinB = 19;                       // DT  - Interrupt 1 (Channel B)
+const int pinA = 2;                       // CLK - Interrupt 0 (Channel A)
+const int pinB = 3;                       // DT  - Interrupt 1 (Channel B)
 volatile int prevA = LOW;
 
 // ===== ENCODER & MOTOR PARAMETERS ===== //
 const long SAFE_POS_COUNTS = 0;           // Encoder count for safe zone
-const long countsPerRev = 854;            // Total Motor Counts
-const long CONST_90_DEG = 214;            // 90-degree movement
+const long countsPerRev    = 854;         // Total Motor Counts
+const long CONST_90_DEG    = 214;         // 90-degree movement
 
 // ===== MOTOR SPEEDS ===== //
-const int m3DownSpeed = 100;              // M3 speed to lower
-const int m3UpSpeed = 100;                // M3 speed to raise
-const int m4Speed = 200;                  // M4 speed
-const int SAFE_SPEED = 150;               // Speed to reach home position
+const int m3DownSpeed     = 100;          // M3 speed to lower
+const int m3UpSpeed       = 100;          // M3 speed to raise
+const int m4Speed         = 100;          // M4 speed
+const int SAFE_SPEED      = 150;          // Speed to reach home position
 
 // ===== TIMING PARAMETERS ===== //
 const unsigned long MOTOR_TIMEOUT_MOVE = 15000;       // 15 seconds for normal moves
@@ -61,8 +61,10 @@ volatile long position = 0;               // Current motor position
 
 // ===== MOTOR SHIELD ===== //
 DualVNH5019MotorShield md_main;
+DualVNH5019MotorShield md_external;
 
 // ===== FUNCTION IMPLEMENTATIONS ===== //
+// Initialize motor system
 void initializeMotors(){
   md_main.init();
   pinMode(pinA, INPUT_PULLUP);
@@ -70,10 +72,12 @@ void initializeMotors(){
   attachInterrupt(digitalPinToInterrupt(pinA), updateEncoder, CHANGE);
 }
 
+// Encoder ISR. Called automatically when ecoder Channel A changes states
 void updateEncoder(){
   int currentA = digitalRead(pinA);
   int currentB = digitalRead(pinB);
 
+  // Detet state changes and determine direction
   if (currentA != prevA){
     if (currentA == HIGH){
       if (currentB == LOW) position++;
@@ -86,6 +90,7 @@ void updateEncoder(){
   prevA = currentA;
 }
 
+// Check for motor faults
 bool checkMotorFaults(){
   if (md_main.getM1Fault()){
     Serial.println("ERROR: M4 fault detected!");
@@ -103,6 +108,7 @@ bool checkMotorFaults(){
   return false;
 }
 
+// Save encoder position to EEPROM
 void savedEncoderPos(){
   noInterrupts();
   long tempPos = position;
@@ -112,6 +118,7 @@ void savedEncoderPos(){
   Serial.println(tempPos);
 }
 
+// Load encoder position from EEPROM
 long loadEncoderPos(){
   long savedPos;
   EEPROM.get(EEPROM_ADDR_POS, savedPos);
@@ -120,18 +127,20 @@ long loadEncoderPos(){
   return savedPos;
 }
 
+// Get current encoder position safely
 long getPosition(){
-  noInterrupts();   // Temporarily stop all interrupts
-  long pos = position;  // Read the position value
-  interrupts();   // Re-enable interrupts
+  noInterrupts();
+  long pos = position;
+  interrupts();
   return pos;
 }
 
+// Waits for the user input (START or 'S')
 bool waitForRun(){
   clearSerialInput();
   Serial.println("Press [SPACE] to start or 'S' to stop.");
 
-  while (true) {
+  while (true){
     if (Serial.available() > 0){
       char input = Serial.read();
 
@@ -142,11 +151,16 @@ bool waitForRun(){
         Serial.println("System idle.");
         delay(5000);
         return false;
+      } else if (input == 'PPOII'){
+        Serial.println("Special thanks to my family and friends and the team for the effort on the 'Middle Man'! <3");
+        delay(5000);
+        return false;
       }
     }
   }
 }
 
+// Moves M3 to the target position
 bool moveM3ToPos(long targetCount, int speed, const char* direction){
   position = 0;
   md_main.setM2Speed(speed);
@@ -158,6 +172,7 @@ bool moveM3ToPos(long targetCount, int speed, const char* direction){
   unsigned long lastPrintTime = 0;
 
   while (abs(getPosition()) < targetCount){
+    // Check for timeout
     if (millis() - startTime > MOTOR_TIMEOUT_MOVE){
       Serial.print("ERROR: M3 ");
       Serial.print(direction);
@@ -166,10 +181,12 @@ bool moveM3ToPos(long targetCount, int speed, const char* direction){
       return false;
     }
 
+    // Check for motor faults
     if (checkMotorFaults()){
       return false;
     }
 
+    // Print progress every 100ms
     if (millis() - lastPrintTime > 100){
       Serial.print("Encoder Count: ");
       Serial.println(getPosition());
@@ -186,12 +203,14 @@ bool moveM3ToPos(long targetCount, int speed, const char* direction){
   return true;
 }
 
+// Continuously run M4 for the belt
 void runM4Cont(int speed){
   md_main.setM1Speed(speed);
   Serial.print("Motor 4 running continuously at: ");
   Serial.println(speed);
 }
 
+// Stops individual motors
 void stopMotor(int motorNum){
   if (motorNum == Motor::M1){
     // Add changes for M1
@@ -209,6 +228,7 @@ void stopMotor(int motorNum){
   }
 }
 
+// Return to the safe position
 bool goToSafePos(){
   long savedPos = loadEncoderPos();
   position = savedPos;
@@ -270,6 +290,7 @@ bool goToSafePos(){
   return true;
 }
 
+// Emergency stop procedure
 void emergencyStop(){
   Serial.println("!! EMERGENCY STOP - RETURNING TO SAFE POSITION !!");
 
@@ -288,8 +309,10 @@ void emergencyStop(){
   while(true);
 }
 
+// Clear serial input buffer
 void clearSerialInput(){
   while (Serial.available() > 0){
     Serial.read();
   }
+
 }

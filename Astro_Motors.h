@@ -21,9 +21,9 @@ Motor Assignments:
 #include <DualVNH5019MotorShield.h>
 
 // ===== HARDWARE CONFIGURATION ===== //
-extern const int pinA;    // CLK - Interrupt 0 (Channel A, Blue)
-extern const int pinB;    // DT  - Interrupt 1 (Channel B, Yellow)
-extern volatile int prevA;
+extern const int pinA;      // Encoder Channel A (Blue)
+extern const int pinB;      // Encoder Channel B (Yellow)
+extern volatile int prevA;  // Previous state of Channel A
 
 // ===== ENCODER & MOTOR PARAMETERS ===== //
 extern const long SAFE_POS_COUNTS;  // Safe position = 0 when conveyor is fully raised
@@ -61,6 +61,7 @@ enum Motor {
 
 // ===== MOTOR SHIELD ===== //
 extern DualVNH5019MotorShield md_main;      // Controls the main motors (M3 and M4)
+extern DualVNH5019MotorShield md_external;  // Controls the other motors (M1 and M2)
 
 // ===== FUNCTION DECLARATIONS ===== //
 void initializeMotors();                                                // Initialize motor system

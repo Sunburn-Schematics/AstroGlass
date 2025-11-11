@@ -32,13 +32,12 @@ void setup() {
 
 void loop() {
   // Wait for user to press SPACE to start
-  if (!waitForRun()) {
+  if (!waitForRun()){
     delay(250);
     return;
   }
   
-  // Force encoder position to 0 at start of every sequence
-  position = 0;
+  position = 0;   // Force encoder position to 0 at start of every sequence
   
   Serial.println("");
   Serial.println("Starting Sequence...");
@@ -55,9 +54,9 @@ void loop() {
   unsigned long lastPrint = 0;
   
   // Wait until encoder reaches target count
-  while (abs(getPosition()) < CONST_90_DEG) {
+  while (abs(getPosition()) < CONST_90_DEG){
     // Check for timeout
-    if (millis() - startTime > MOTOR_TIMEOUT_MOVE) {
+    if (millis() - startTime > MOTOR_TIMEOUT_MOVE){
       Serial.println("");
       Serial.println("ERROR: M3 lowering timeout!");
       Serial.print("Reached: ");
@@ -66,13 +65,13 @@ void loop() {
       Serial.println(CONST_90_DEG);
       Serial.println("");
       Serial.println("Problem: Encoder not counting or motor not moving.");
-      Serial.println("Check wiring and run MOTOR_ENCODER_TEST.");
+      Serial.println("Check wiring. [Run MOTOR_ENCODER_TEST, if needed].");
       md_main.setM2Speed(0);
       while(true);  // Halt
     }
     
     // Print progress every 200ms
-    if (millis() - lastPrint > 200) {
+    if (millis() - lastPrint > 200){
       Serial.print("  Count: ");
       Serial.println(getPosition());
       lastPrint = millis();
@@ -155,3 +154,6 @@ void loop() {
   
   delay(SEQUENCE_PAUSE);
 }
+
+
+
