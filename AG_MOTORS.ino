@@ -1,4 +1,15 @@
+/*
+==============================================================
+   PROJECT:   AstroGlass, The  Middle Man, Control System
+   PLATFORM:  Arduino MEGA 2560
+   DRIVER:    x2 DualVNH5019 Motor Shield
+   AUTHOR:    Pedro Ortiz
+   VERSION:   v0.21.1
+==============================================================
+*/
+
 #include <EEPROM.h>
+#include <Arduino.h>
 #include <DualVNH5019MotorShield.h>
 
 // ===== SPEED REFERENCE TABLE (-400 to +400) ===== //
@@ -14,9 +25,9 @@
    400: Full Forward      (100%)
 */
 
-// ===== HARDWARE CONFIGURATION ===== //
-const int m3PinA     = 2;                       // CLK - Interrupt pin (Channel A)
-const int m3PinB     = 3;                       // DT  - Regular digital pin (Channel B)
+// --- Encoder Pins --- //
+const int m3PinA     = 2;                       // Encoder Channel A, Blue
+const int m3PinB     = 3;                       // Encoder Channel B, Yellow
 volatile int m3PrevA = LOW;
 
 // ===== ENCODER & MOTOR PARAMETERS ===== //
@@ -47,7 +58,9 @@ volatile long m3Position = 0;                   // Current motor position
 // ===== MOTOR SHIELD ===== //
 DualVNH5019MotorShield md;
 
-// ===== FUNCTION DECLARATIONS ===== //
+// ============================================================
+//                     FUNCTION DECLARATIONS
+// ============================================================
 void initializeMotors();
 void updateM3Encoder();
 bool checkMotorFaults();
@@ -62,7 +75,9 @@ bool m3GoToSafePos();
 void emergencyStop();
 void clearSerialInput();
 
-// ===== FUNCTION IMPLEMENTATIONS ===== //
+// ============================================================
+//                     FUNCTION DEFINITIONS
+// ============================================================
 void initializeMotors(){
   md.init();
   pinMode(m3PinA, INPUT_PULLUP);
@@ -308,7 +323,9 @@ void clearSerialInput(){
   }
 }
 
-// ===== SETUP ===== //
+// ============================================================
+//                           SETUP
+// ============================================================
 void setup() {
   Serial.begin(115200);
   initializeMotors();
@@ -335,7 +352,9 @@ void setup() {
   delay(1000);
 }
 
-// ===== MAIN LOOP ===== //
+// ============================================================
+//                          MAIN LOOP
+// ============================================================
 void loop() {
   if (!waitForRun()) {
     delay(250);
