@@ -4,7 +4,7 @@
    PLATFORM:  Arduino MEGA 2560
    DRIVER:    x2 DualVNH5019 Motor Shield
    AUTHOR:    Pedro Ortiz
-   VERSION:   v0.23
+   VERSION:   v0.24
 ==============================================================
 */
 
@@ -40,10 +40,12 @@ volatile int m3PrevA = LOW;
 const long SAFE_POS_COUNTS = 0;               // Encoder count for home/safe zone
 const long countsPerRev    = 854;             // Maverick: 7 PPR × 2 edges × 61:1 gear
 const long CONST_90_DEG    = 214;             // 90-degree movement (1/4 revolution)
+const long MAX_VALID_POS   = 500;             // Maximum valid encoder position
+const long MIN_VALID_POS   = -500;            // Minimum valid encoder position
 
 // ===== MOTOR SPEEDS ===== //
-const int m3Speed     = 100;                  // Speed for M3 to raise
-const int m4Speed     = 200;                  // Speed for M4 belt movement
+const int m3Speed     = 75;                  // Speed for M3 to raise
+const int m4Speed     = 300;                  // Speed for M4 belt movement
 const int SAFE_SPEED  = 150;                  // Speed to reach home position
 
 // ===== TIMING PARAMETERS ===== //
@@ -72,6 +74,7 @@ void updateM3Encoder();
 bool checkMotorFaults();
 void savedM3EncoderPos();
 long loadM3EncoderPos();
+bool validateAndFixEEPROM();
 long getM3Position();
 bool waitForRun();
 bool moveM3ToPos(long targetCount, int speed, const char* direction);
@@ -80,6 +83,8 @@ void stopMotor(int motorNum);
 bool m3GoToSafePos();
 void emergencyStop();
 void clearSerialInput();
+
+void cleanM4Fault();
 
 // ============================================================
 //                     FUNCTION DEFINITIONS
@@ -122,6 +127,44 @@ bool checkMotorFaults(){
     return true;
   }
   return false;
+}
+
+bool validateAndFixEEPROM(){
+  Serial.println("Validating EEPROM data...");
+  
+  long savedPos;
+  EEPROM.get(M3_EEPROM_ADDR_POS, savedPos);
+  
+  Serial.print("EEPROM value: ");
+  Serial.println(savedPos);
+  
+  // Check if value is corrupted (outside reasonable range)
+  if (savedPos < MIN_VALID_POS || savedPos > MAX_VALID_POS) {
+    Serial.println("WARNING: EEPROM data corrupted!");
+    Serial.print("Invalid value detected: ");
+    Serial.println(savedPos);
+    Serial.println("Auto-resetting to 0...");
+    
+    long zeroValue = 0;
+    EEPROM.put(M3_EEPROM_ADDR_POS, zeroValue);
+    
+    // Verify write
+    long verifyValue;
+    EEPROM.get(M3_EEPROM_ADDR_POS, verifyValue);
+    
+    if (verifyValue == 0) {
+      Serial.println("SUCCESS: EEPROM reset to 0");
+      Serial.println("");
+      return true;
+    } else {
+      Serial.println("ERROR: EEPROM reset failed!");
+      return false;
+    }
+  } else {
+    Serial.println("EEPROM data valid.");
+    Serial.println("");
+    return true;
+  }
 }
 
 void savedM3EncoderPos(){
@@ -329,11 +372,52 @@ void clearSerialInput(){
   }
 }
 
+void clearM4Fault(){
+  // To clear a fault, set speed to 0 and wait
+  md.setM1Speed(0);
+  delay(100);
+  
+  // Check if fault is cleared
+  if (md.getM1Fault()) {
+    Serial.println("M4 fault still present, attempting hard reset...");
+    
+    // Try toggling direction to clear internal fault state
+    md.setM1Speed(50);
+    delay(50);
+    md.setM1Speed(0);
+    delay(100);
+    md.setM1Speed(-50);
+    delay(50);
+    md.setM1Speed(0);
+    delay(100);
+    
+    if (md.getM1Fault()) {
+      Serial.println("ERROR: Cannot clear M4 fault! Hardware issue.");
+      return;
+    }
+  }
+  
+  Serial.println("M4 fault cleared successfully.");
+}
+
 // ============================================================
 //                           SETUP
 // ============================================================
 void setup() {
   Serial.begin(115200);
+  delay(500);
+  
+  Serial.println("========================================");
+  Serial.println("  AstroGlass Control System v0.24");
+  Serial.println("========================================");
+  Serial.println("");
+  
+  // VALIDATE AND FIX EEPROM BEFORE INITIALIZING MOTORS
+  if (!validateAndFixEEPROM()) {
+    Serial.println("FATAL ERROR: Cannot initialize EEPROM!");
+    while(true);
+  }
+  
   initializeMotors();
 
   Serial.println("=== Test Sequence: M3 Down, M4 Run, M3 Up, Stop ===");
@@ -367,6 +451,18 @@ void loop() {
     return;
   }
 
+  // CLEAR ANY FAULTS FROM PREVIOUS RUN
+  Serial.println("Checking for residual faults...");
+  if (md.getM1Fault()) {
+    Serial.println("M4 fault detected from previous run!");
+    clearM4Fault();
+  }
+  if (md.getM2Fault()) {
+    Serial.println("M3 fault detected from previous run!");
+    md.setM2Speed(0);
+    delay(100);
+  }
+
   m3Position = 0;
 
   // M3 lowers down
@@ -377,9 +473,28 @@ void loop() {
   delay(DELAY_AFTER_DOWN);
 
   // M4 runs continuously
+  Serial.println("Starting M4 belt...");
+  
+  // Final check before running
+  if (md.getM1Fault()) {
+    Serial.println("ERROR: M4 fault present before start!");
+    clearM4Fault();
+    delay(500);
+  }
+  
   runM4Cont(m4Speed);
   delay(M4_RUN_TIME);
   stopMotor(4);
+  
+  // Check for fault after run
+  if (md.getM1Fault()) {
+    Serial.println("WARNING: M4 fault occurred during run!");
+    Serial.println("Possible causes:");
+    Serial.println("- Motor drawing too much current");
+    Serial.println("- Motor stalled or jammed");
+    Serial.println("- Loose wiring");
+  }
+  
   delay(DELAY_AFTER_M4);
 
   // M3 raises back up
@@ -392,11 +507,20 @@ void loop() {
   // Ensure M4 is stopped
   stopMotor(4);
 
-  savedM3EncoderPos();
+  // CLEAR FAULTS AT END OF SEQUENCE
+  delay(500);
+  if (md.getM1Fault()) {
+    Serial.println("Clearing M4 fault at end of sequence...");
+    clearM4Fault();
+  }
+
+  // Reset position and save to EEPROM
   m3Position = 0;
   EEPROM.put(M3_EEPROM_ADDR_POS, 0);
 
   Serial.println("=== SEQUENCE COMPLETE ===");
+  Serial.println("");
+  
   delay(SEQUENCE_PAUSE);
 }
 
