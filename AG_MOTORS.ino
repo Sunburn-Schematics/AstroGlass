@@ -4,7 +4,7 @@
    PLATFORM:  Arduino MEGA 2560
    DRIVER:    x2 DualVNH5019 Motor Shield
    AUTHOR:    Pedro Ortiz
-   VERSION:   v0.21.1
+   VERSION:   v0.23
 ==============================================================
 */
 
@@ -25,7 +25,13 @@
    400: Full Forward      (100%)
 */
 
+// --- Shield 2 Control Pins (MINIMAL - Just INA/INB) --- //
+const int M1_INA = 30;                          // M1 direction A
+const int M1_INB = 31;                          // M1 direction B
+
 // --- Encoder Pins --- //
+const int m1PinA     = 18;
+const int m1PinB     = 19;
 const int m3PinA     = 2;                       // Encoder Channel A, Blue
 const int m3PinB     = 3;                       // Encoder Channel B, Yellow
 volatile int m3PrevA = LOW;
@@ -41,7 +47,7 @@ const int m4Speed     = 200;                  // Speed for M4 belt movement
 const int SAFE_SPEED  = 150;                  // Speed to reach home position
 
 // ===== TIMING PARAMETERS ===== //
-const unsigned long MOTOR_TIMEOUT_MOVE = 5000;    // 5 seconds for normal moves
+const unsigned long MOTOR_TIMEOUT_MOVE = 15000;   // 15 seconds for normal moves
 const unsigned long MOTOR_TIMEOUT_HOME = 15000;   // 15 seconds for homing
 const unsigned long DELAY_AFTER_DOWN   = 2000;    // 2 seconds
 const unsigned long M4_RUN_TIME        = 3000;    // 3 seconds
@@ -248,7 +254,7 @@ bool m3GoToSafePos(){
   unsigned long lastPrintTime = 0;
 
   if (getM3Position() > SAFE_POS_COUNTS){
-    md.setM2Speed(-SAFE_SPEED);  // Negative speed to move down
+    md.setM2Speed(SAFE_SPEED);  // Negative speed to move down
     
     while (getM3Position() > SAFE_POS_COUNTS){
       if (millis() - startTime > MOTOR_TIMEOUT_HOME){
@@ -270,7 +276,7 @@ bool m3GoToSafePos(){
     }
     
   } else if (getM3Position() < SAFE_POS_COUNTS){
-    md.setM2Speed(SAFE_SPEED);  // Positive speed to move up
+    md.setM2Speed(-SAFE_SPEED);  // Positive speed to move up
     
     while (getM3Position() < SAFE_POS_COUNTS){
       if (millis() - startTime > MOTOR_TIMEOUT_HOME){
@@ -387,6 +393,8 @@ void loop() {
   stopMotor(4);
 
   savedM3EncoderPos();
+  m3Position = 0;
+  EEPROM.put(M3_EEPROM_ADDR_POS, 0);
 
   Serial.println("=== SEQUENCE COMPLETE ===");
   delay(SEQUENCE_PAUSE);
