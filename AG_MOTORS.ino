@@ -4,7 +4,7 @@
    PLATFORM:  Arduino MEGA 2560
    DRIVER:    x2 DualVNH5019 Motor Shield
    AUTHOR:    Pedro Ortiz
-   VERSION:   v0.24
+   VERSION:   v0.25 - M1 Fully Integrated
 ==============================================================
 */
 
@@ -25,13 +25,14 @@
    400: Full Forward      (100%)
 */
 
-// --- Shield 2 Control Pins (MINIMAL - Just INA/INB) --- //
+// --- Shield 2 Control Pins --- //
 const int M1_INA = 30;                          // M1 direction A
 const int M1_INB = 31;                          // M1 direction B
 
 // --- Encoder Pins --- //
 const int m1PinA     = 18;
 const int m1PinB     = 19;
+volatile int m1PrevA = LOW;
 const int m3PinA     = 2;                       // Encoder Channel A, Blue
 const int m3PinB     = 3;                       // Encoder Channel B, Yellow
 volatile int m3PrevA = LOW;
@@ -43,7 +44,12 @@ const long CONST_90_DEG    = 214;             // 90-degree movement (1/4 revolut
 const long MAX_VALID_POS   = 500;             // Maximum valid encoder position
 const long MIN_VALID_POS   = -500;            // Minimum valid encoder position
 
+// ===== M1 ENCODER & MOTOR PARAMETERS ===== //
+const long M1_EXTEND_COUNTS  = 200;     // How far plunger extends (adjust after testing)
+const long M1_HOLD_TIME      = 2000;    // Hold time in milliseconds (2 seconds)
+
 // ===== MOTOR SPEEDS ===== //
+const int m1Speed     = 25;
 const int m3Speed     = 75;                  // Speed for M3 to raise
 const int m4Speed     = 300;                  // Speed for M4 belt movement
 const int SAFE_SPEED  = 150;                  // Speed to reach home position
@@ -61,6 +67,7 @@ const unsigned long SEQUENCE_PAUSE     = 500;     // 0.5 seconds
 const int M3_EEPROM_ADDR_POS = 0;                // Where encoder count is stored
 
 // ===== MOTOR POSITION ===== //
+volatile long m1Position = 0;
 volatile long m3Position = 0;                   // Current motor position
 
 // ===== MOTOR SHIELD ===== //
@@ -70,11 +77,19 @@ DualVNH5019MotorShield md;
 //                     FUNCTION DECLARATIONS
 // ============================================================
 void initializeMotors();
+
+void updateM1Encoder();
+
 void updateM3Encoder();
 bool checkMotorFaults();
 void savedM3EncoderPos();
 long loadM3EncoderPos();
 bool validateAndFixEEPROM();
+
+long getM1Position();
+void setM1Direction(int dir);
+bool runM1Sequence();
+
 long getM3Position();
 bool waitForRun();
 bool moveM3ToPos(long targetCount, int speed, const char* direction);
@@ -84,7 +99,7 @@ bool m3GoToSafePos();
 void emergencyStop();
 void clearSerialInput();
 
-void cleanM4Fault();
+void clearM4Fault();
 
 // ============================================================
 //                     FUNCTION DEFINITIONS
@@ -94,6 +109,34 @@ void initializeMotors(){
   pinMode(m3PinA, INPUT_PULLUP);
   pinMode(m3PinB, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
+
+  // Initialize M1 control pins
+  pinMode(M1_INA, OUTPUT);
+  pinMode(M1_INB, OUTPUT);
+  digitalWrite(M1_INA, LOW);
+  digitalWrite(M1_INB, LOW);
+  
+  // Initialize M1 encoder
+  pinMode(m1PinA, INPUT_PULLUP);
+  pinMode(m1PinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(m1PinA), updateM1Encoder, CHANGE);
+}
+
+// M1 Encoder ISR
+void updateM1Encoder(){
+  int currentA = digitalRead(m1PinA);
+  int currentB = digitalRead(m1PinB);
+
+  if (currentA != m1PrevA) {
+    if (currentA == HIGH) {
+      if (currentB == LOW) m1Position++;
+      else m1Position--;
+    } else {
+      if (currentB == HIGH) m1Position++;
+      else m1Position--;
+    }
+  }
+  m1PrevA = currentA;
 }
 
 void updateM3Encoder(){
@@ -184,6 +227,14 @@ long loadM3EncoderPos(){
   return savedPos;
 }
 
+// Get M1 position safely
+long getM1Position(){
+  noInterrupts();
+  long pos = m1Position;
+  interrupts();
+  return pos;
+}
+
 long getM3Position(){
   noInterrupts();
   long pos = m3Position;
@@ -193,7 +244,7 @@ long getM3Position(){
 
 bool waitForRun(){
   clearSerialInput();
-  Serial.println("Press [SPACE] to start or 'S' to stop.");
+  Serial.println("Press [SPACE] for full sequence, 'M' to test M1, or 'S' to stop.");
   
   unsigned long startWaitTime = millis();
   const unsigned long WAIT_TIMEOUT = 60000;  // 60 second timeout
@@ -210,7 +261,7 @@ bool waitForRun(){
       char input = Serial.read();
 
       if (input == ' ') {
-        Serial.println("Starting the sequence...");
+        Serial.println("Starting full sequence...");
         return true;
       } else if (input == 'S' || input == 's'){
         Serial.println("System idle.");
@@ -220,9 +271,104 @@ bool waitForRun(){
         Serial.println("I, Pedro P. Ortiz II, designed this code to work the Middle Man.");
         delay(5000);
         return false;
+      } else if (input == 'M' || input == 'm'){
+        runM1Sequence();
+        return false;
       }
     }
   }
+}
+
+
+// Set M1 direction (1=extend, -1=retract, 0=stop)
+void setM1Direction(int dir){
+  if (dir > 0) {
+    digitalWrite(M1_INA, HIGH);
+    digitalWrite(M1_INB, LOW);
+  } else if (dir < 0) {
+    digitalWrite(M1_INA, LOW);
+    digitalWrite(M1_INB, HIGH);
+  } else {
+    digitalWrite(M1_INA, LOW);
+    digitalWrite(M1_INB, LOW);
+  }
+}
+
+// Complete M1 plunger sequence
+bool runM1Sequence(){
+  Serial.println("");
+  Serial.println("=== M1 PLUNGER SEQUENCE ===");
+  
+  // Reset position
+  m1Position = 0;
+  
+  // STEP 1: Extend plunger
+  Serial.print("Extending plunger (target: ");
+  Serial.print(M1_EXTEND_COUNTS);
+  Serial.println(" counts)...");
+  
+  setM1Direction(1);  // Extend
+  
+  unsigned long startTime = millis();
+  while (abs(getM1Position()) < M1_EXTEND_COUNTS) {
+    if (millis() - startTime > 10000) {
+      Serial.println("ERROR: M1 extend timeout!");
+      setM1Direction(0);
+      return false;
+    }
+    
+    // Print progress
+    if (millis() % 200 == 0) {
+      Serial.print("  Count: ");
+      Serial.println(getM1Position());
+    }
+    delay(10);
+  }
+  
+  setM1Direction(0);  // Stop
+  Serial.print("Extension complete. Final count: ");
+  Serial.println(getM1Position());
+  Serial.println("");
+  
+  // STEP 2: Hold compression
+  Serial.print("Holding compression for ");
+  Serial.print(M1_HOLD_TIME / 1000);
+  Serial.println(" seconds...");
+  delay(M1_HOLD_TIME);
+  Serial.println("Hold complete.");
+  Serial.println("");
+  
+  // STEP 3: Retract plunger
+  Serial.print("Retracting plunger (target: ");
+  Serial.print(M1_EXTEND_COUNTS);
+  Serial.println(" counts)...");
+  
+  m1Position = 0;  // Reset for return movement
+  setM1Direction(-1);  // Retract
+  
+  startTime = millis();
+  while (abs(getM1Position()) < M1_EXTEND_COUNTS) {
+    if (millis() - startTime > 10000) {
+      Serial.println("ERROR: M1 retract timeout!");
+      setM1Direction(0);
+      return false;
+    }
+    
+    // Print progress
+    if (millis() % 200 == 0) {
+      Serial.print("  Count: ");
+      Serial.println(getM1Position());
+    }
+    delay(10);
+  }
+  
+  setM1Direction(0);  // Stop
+  Serial.print("Retraction complete. Final count: ");
+  Serial.println(getM1Position());
+  Serial.println("");
+  
+  Serial.println("=== M1 PLUNGER SEQUENCE COMPLETE ===");
+  return true;
 }
 
 bool moveM3ToPos(long targetCount, int speed, const char* direction){
@@ -272,7 +418,8 @@ void runM4Cont(int speed){
 
 void stopMotor(int motorNum){
   if (motorNum == 1) {
-    // Add changes for M1
+    setM1Direction(0);
+    Serial.println("Motor 1 (Plunger) stopped.");
   } else if (motorNum == 2){
     // Add changes for M2
   } else if (motorNum == 3){
@@ -353,6 +500,7 @@ void emergencyStop(){
 
   md.setM2Speed(0);
   md.setM1Speed(0);
+  setM1Direction(0);  // ADD THIS
 
   delay(500);
 
@@ -408,8 +556,13 @@ void setup() {
   delay(500);
   
   Serial.println("========================================");
-  Serial.println("  AstroGlass Control System v0.24");
+  Serial.println("  AstroGlass Control System v1.0");
   Serial.println("========================================");
+  Serial.println("");
+  Serial.println("Motors Configured:");
+  Serial.println("  M1 - Plunger (Pins 30/31, Encoder 18/19)");
+  Serial.println("  M3 - Conveyor Lift (Encoder 2/3)");
+  Serial.println("  M4 - Belt Drive");
   Serial.println("");
   
   // VALIDATE AND FIX EEPROM BEFORE INITIALIZING MOTORS
@@ -420,7 +573,7 @@ void setup() {
   
   initializeMotors();
 
-  Serial.println("=== Test Sequence: M3 Down, M4 Run, M3 Up, Stop ===");
+  Serial.println("=== Full Sequence: M3, M4, M3, M1 ===");
   
   long currPos = loadM3EncoderPos();
   m3Position = currPos;
@@ -506,6 +659,18 @@ void loop() {
 
   // Ensure M4 is stopped
   stopMotor(4);
+
+  // ===== STEP 4: RUN M1 PLUNGER SEQUENCE ===== //
+  Serial.println("");
+  Serial.println("=== STEP 4: M1 PLUNGER ===");
+  
+  if (!runM1Sequence()) {
+    Serial.println("ERROR: M1 plunger sequence failed!");
+    emergencyStop();
+  }
+  
+  Serial.println("M1 plunger sequence complete.");
+  Serial.println("");
 
   // CLEAR FAULTS AT END OF SEQUENCE
   delay(500);
