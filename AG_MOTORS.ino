@@ -5,7 +5,7 @@
    DRIVER:    x2 DualVNH5019 Motor Shield
    MOTOR:     Maverick 12V DC Gear Motor w/Encoder (61:1)
    AUTHOR:    Pedro Ortiz
-   VERSION:   v1.0
+   VERSION:   v1.0.1
 =============================================================== //
 */
 
@@ -592,21 +592,22 @@ bool runM2Sequence(){
   // STEP 2: Start M4 at halfway point
   Serial.println("M2: Reached halfway - Starting M4 belt");
   
-  // Clear M4 faults before starting
-  if (md.getM1Fault() || md.getM2Fault()){
-    Serial.println("Clearing faults before M4...");
-    md.init();
-    delay(500);
-    
-    // Re-attach M3 encoder
-    pinMode(m3PinA, INPUT_PULLUP);
-    pinMode(m3PinB, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
-    delay(500);
-  }
+  // ALWAYS CLEAR FAULTS - Don't make it conditional
+  Serial.println("Clearing faults before M4...");
+  md.setM1Speed(0);
+  delay(100);
+  md.init();
+  delay(500);
+  
+  // Re-attach M3 encoder
+  pinMode(m3PinA, INPUT_PULLUP);
+  pinMode(m3PinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
+  delay(500);
   
   runM4Cont(m4Speed);
+  
   unsigned long m4StartTime = millis();
   
   // STEP 3: Continue lowering to full position (200 counts total)
@@ -846,23 +847,21 @@ void runM4Cont(int speed){
 void testM4(){
   Serial.println("Testing M4 (3 seconds)...");
   
-  // CLEAR FAULTS BEFORE TESTING
+  // ALWAYS CLEAR FAULTS - Don't make it conditional
   Serial.println("Clearing faults...");
   md.setM1Speed(0);
   delay(100);
   
-  if (md.getM1Fault() || md.getM2Fault()){
-    Serial.println("Fault detected - reinitializing...");
-    md.init();
-    delay(500);
-    
-    // Re-attach M3 encoder (since md.init() clears it)
-    pinMode(m3PinA, INPUT_PULLUP);
-    pinMode(m3PinB, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
-    delay(500);
-  }
+  // Always reinitialize to ensure clean state
+  md.init();
+  delay(500);
+  
+  // Re-attach M3 encoder (since md.init() clears it)
+  pinMode(m3PinA, INPUT_PULLUP);
+  pinMode(m3PinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
+  delay(500);
   
   Serial.println("Starting motor...");
   md.setM1Speed(m4Speed);
