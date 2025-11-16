@@ -5,7 +5,7 @@
    DRIVER:    x2 DualVNH5019 Motor Shield
    MOTOR:     Maverick 12V DC Gear Motor w/Encoder (61:1)
    AUTHOR:    Pedro Ortiz
-   VERSION:   v0.33
+   VERSION:   v1.0
 =============================================================== //
 */
 
@@ -19,10 +19,10 @@ const int M1_INA = 30;
 const int M1_INB = 31;
 const int M1_PWM = 12;
 
-// M2 Platform Motor (NOT CONFIGURED)
-const int M2_INA = 0;
-const int M2_INB = 0;
-const int M2_PWM = 0;
+// M2 Platform Motor
+const int M2_INA = 7;
+const int M2_INB = 8;
+const int M2_PWM = 11;
 
 // ================= EMERGENCY STOP BUTTON ==================== //
 const int EMERGENCY_STOP_PIN = 21;
@@ -34,8 +34,8 @@ const int m1PinB     = 19;
 volatile int m1PrevA = LOW;
 
 // M2 Encoder (NOT CONFIGURED)
-const int m2PinA     = 0;
-const int m2PinB     = 0;
+const int m2PinA     = 20;
+const int m2PinB     = 22;
 volatile int m2PrevA = LOW;
 
 // M3 Encoder
@@ -48,6 +48,10 @@ volatile int m3PrevA = LOW;
 const long M1_EXTEND_COUNTS = 200;
 const long M1_HOLD_TIME     = 2000;
 const int m1Speed           = 75;
+
+// M2 Platform Parameters
+const long M2_LOWER_COUNTS = 200;       // How far platform lowers (adjust after testing)
+const int m2Speed          = 75;        // Speed for M2 movement
 
 // M3 Conveyor Parameters
 const long SAFE_POS_COUNTS   = 0;
@@ -107,6 +111,10 @@ bool runM1Sequence();
 void testM1();
 
 void updateM2Encoder();
+long getM2Position();
+void setM2Direction(int dir);
+bool runM2Sequence();
+void testM2();
 
 void updateM3Encoder();
 long getM3Position();
@@ -136,6 +144,20 @@ void initializeMotors(){
   pinMode(m1PinB, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(m1PinA), updateM1Encoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(m1PinB), updateM1Encoder, CHANGE);
+
+  // Initialize M2 control pins (Shield 2)
+  pinMode(M2_INA, OUTPUT);
+  pinMode(M2_INB, OUTPUT);
+  pinMode(M2_PWM, OUTPUT);
+  digitalWrite(M2_INA, LOW);
+  digitalWrite(M2_INB, LOW);
+  analogWrite(M2_PWM, 0);
+  
+  // Initialize M2 encoder
+  pinMode(m2PinA, INPUT_PULLUP);
+  pinMode(m2PinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(m2PinA), updateM2Encoder, CHANGE);
+  // Note: m2PinB (22) is not an interrupt pin, but encoder will still work
   
   // Initialize M3 encoder
   pinMode(m3PinA, INPUT_PULLUP);
@@ -260,7 +282,7 @@ bool waitForRun(){
         testM1();
         return false;
       } else if (input == '2'){
-        Serial.println("M2 not yet implemented");
+        testM2();
         return false;
       } else if (input == '3'){
         testM3();
@@ -506,7 +528,176 @@ void testM1(){
 }
 
 // =================== M2 FUNCTIONS ======================= //
-void updateM2Encoder(){}
+void updateM2Encoder(){
+  int currentA = digitalRead(m2PinA);
+  int currentB = digitalRead(m2PinB);
+
+  if (currentA != m2PrevA) {
+    if (currentA == HIGH) {
+      if (currentB == LOW) m2Position++;
+      else m2Position--;
+    } else {
+      if (currentB == HIGH) m2Position++;
+      else m2Position--;
+    }
+    m2PrevA = currentA;
+  }
+}
+
+long getM2Position(){
+  noInterrupts();
+  long pos = m2Position;
+  interrupts();
+  return pos;
+}
+
+void setM2Direction(int dir){
+  if (dir > 0){         // 1 = Lower (platform goes down)
+    digitalWrite(M2_INA, HIGH);
+    digitalWrite(M2_INB, LOW);
+    analogWrite(M2_PWM, m2Speed);
+  } else if (dir < 0){  // -1 = Raise (platform goes up)
+    digitalWrite(M2_INA, LOW);
+    digitalWrite(M2_INB, HIGH);
+    analogWrite(M2_PWM, m2Speed);
+  } else {              // 0 = Stop
+    digitalWrite(M2_INA, LOW);
+    digitalWrite(M2_INB, LOW);
+    analogWrite(M2_PWM, 0);
+  }
+}
+
+bool runM2Sequence(){
+  Serial.println("");
+  Serial.println("=== M2 PLATFORM SEQUENCE ===");
+  
+  m2Position = 0;
+  
+  // STEP 1: Lower platform to halfway point (100 counts)
+  Serial.println("M2: Lowering to halfway point...");
+  setM2Direction(1);  // Lower
+  
+  unsigned long startTime = millis();
+  while (abs(getM2Position()) < 100) {
+    if (emergencyStopTriggered) emergencyStop();
+    
+    if (millis() - startTime > 10000) {
+      Serial.println("ERROR: M2 halfway timeout!");
+      setM2Direction(0);
+      return false;
+    }
+    delay(10);
+  }
+  
+  // STEP 2: Start M4 at halfway point
+  Serial.println("M2: Reached halfway - Starting M4 belt");
+  
+  // Clear M4 faults before starting
+  if (md.getM1Fault() || md.getM2Fault()){
+    Serial.println("Clearing faults before M4...");
+    md.init();
+    delay(500);
+    
+    // Re-attach M3 encoder
+    pinMode(m3PinA, INPUT_PULLUP);
+    pinMode(m3PinB, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
+    delay(500);
+  }
+  
+  runM4Cont(m4Speed);
+  unsigned long m4StartTime = millis();
+  
+  // STEP 3: Continue lowering to full position (200 counts total)
+  Serial.println("M2: Continuing to full lower position...");
+  
+  startTime = millis();
+  while (abs(getM2Position()) < M2_LOWER_COUNTS) {
+    if (emergencyStopTriggered) emergencyStop();
+    
+    if (millis() - startTime > 10000) {
+      Serial.println("ERROR: M2 full lower timeout!");
+      setM2Direction(0);
+      stopMotor(4);
+      return false;
+    }
+    delay(10);
+  }
+  
+  setM2Direction(0);
+  Serial.print("M2: Fully lowered. Final count: ");
+  Serial.println(getM2Position());
+  
+  // STEP 4: Wait 1 second (M4 still running)
+  Serial.println("M2: Waiting 1 second...");
+  delay(1000);
+  
+  // STEP 5: Raise platform back up
+  Serial.println("M2: Raising back to start position...");
+  setM2Direction(-1);  // Raise
+  
+  startTime = millis();
+  while (abs(getM2Position()) > 5) {  // Count back to ~0 (allow small tolerance)
+    if (emergencyStopTriggered) emergencyStop();
+    
+    if (millis() - startTime > 10000) {
+      Serial.println("ERROR: M2 raise timeout!");
+      setM2Direction(0);
+      stopMotor(4);
+      return false;
+    }
+    
+    // Add position monitoring every 100ms for better feedback
+    unsigned long currentTime = millis();
+    static unsigned long lastPrintTime = 0;
+    if (currentTime - lastPrintTime > 100) {
+      Serial.print("  M2 Position: ");
+      Serial.println(getM2Position());
+      lastPrintTime = currentTime;
+    }
+    
+    delay(10);
+  }
+  
+  setM2Direction(0);
+  Serial.println("M2: Back at start position");
+  
+  // STEP 6: Keep M4 running until 5 seconds total
+  unsigned long m4ElapsedTime = millis() - m4StartTime;
+  if (m4ElapsedTime < M4_TOTAL_RUN_TIME) {
+    unsigned long remainingTime = M4_TOTAL_RUN_TIME - m4ElapsedTime;
+    Serial.print("M4: Running for ");
+    Serial.print(remainingTime / 1000);
+    Serial.println(" more seconds...");
+    delay(remainingTime);
+  }
+  
+  // STEP 7: Stop M4
+  Serial.println("M4: Stopping");
+  stopMotor(4);
+  
+  Serial.println("=== M2 PLATFORM SEQUENCE COMPLETE ===");
+  return true;
+}
+
+void testM2(){
+  Serial.println("Testing M2 Platform (3 seconds)...");
+  Serial.println("Platform lowering...");
+  m2Position = 0;
+  
+  setM2Direction(1);  // Lower
+  unsigned long startTime = millis();
+  
+  while (millis() - startTime < 3000) {
+    Serial.print("M2 Count: ");
+    Serial.println(getM2Position());
+    delay(500);
+  }
+  
+  setM2Direction(0);
+  Serial.println("M2 test complete");
+}
 
 // =================== M3 FUNCTIONS ======================= //
 void updateM3Encoder(){
@@ -736,7 +927,7 @@ void loop() {
     return;
   }
 
-  // CRITICAL: Clear M3 fault after lowering
+  // Clear M3 fault after lowering
   Serial.println("Clearing M3 fault after lowering...");
   md.setM2Speed(0);
   delay(500);
@@ -750,24 +941,16 @@ void loop() {
     return;
   }
 
-  // Step Three: M4 Belt
-  Serial.println("M4: Starting belt");
-  if (md.getM1Fault() || md.getM2Fault()){
-    Serial.println("Clearing faults before M4...");
-    md.init();
-    delay(500);
-    
-    // Re-attach M3 encoder
-    pinMode(m3PinA, INPUT_PULLUP);
-    pinMode(m3PinB, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
-    delay(500);
+  // ADD THIS: Wait 2 seconds before M2 activates
+  Serial.println("Waiting 2 seconds before M2 activates...");
+  delay(2000);
+
+  // Step Three: M2 Platform + M4 Belt (coordinated)
+  if (!runM2Sequence()){
+    Serial.println("Sequence aborted: M2 failed");
+    setSystemState(SYSTEM_SAFE);
+    return;
   }
-  
-  runM4Cont(m4Speed);
-  delay(M4_TOTAL_RUN_TIME);
-  stopMotor(4);
 
   delay(1000);
 
