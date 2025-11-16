@@ -1,61 +1,59 @@
 # AstroGlass Motor Control System
 
-**Author:** Pedro Ortiz
-
-**Version:** v1.1
-
+**Author:** Pedro Ortiz  
+**Version:** v1.1  
 **Latest Update:** 11/16/2025 at 1:05p
 
 ---
 
 ## OVERVIEW
-This repository golds the Arduino code used to control the four-motor subsystem of **FRRED - Freeform Robotic Regolith Engineering Device**. The primary file, **AG_MOTORS.ino** includes all logic coordinated movements, encoder tracking, emergency-handling, and safe-position homing.
+This repository holds the Arduino code used to control the four-motor subsystem of **FRRED - Freeform Robotic Regolith Engineering Device**. The primary file, **AG_MOTORS.ino**, includes all logic for coordinated movements, encoder tracking, emergency-handling, and safe-position homing.
 
 If you're wondering which file is the correct one, it's this one. You're welcome.
 
 ---
 
 ## WHAT THE CODE DOES
-- Controls **4 DC motors**: M1 (Plunger), M2 (Platform), M3 (Conveyor), M4 (Belt)
-- Uses encoders for real-time position feedback
-- Handles **fault detetcion** for Dual VNH5019 motor drivers
-- Implements a full **automated motion sequence**
-- Using EEPROM, stores **state + encoder position**
+- Controls **4 DC motors**: M1 (Plunger), M2 (Platform), M3 (Conveyor), M4 (Belt)  
+- Uses encoders for real-time position feedback  
+- Handles **fault detection** for Dual VNH5019 motor drivers  
+- Implements a full **automated motion sequence**  
+- Using EEPROM, stores **state + encoder position**  
 - Includes a hardware **emergency stop interrupt**
 
 ---
 
 ## HARDWARE USED
-- Arduino **Mega 2560**
-- **(x2)** Dual VNH5019 Motor Sheild
-- **(x4)** Maverick **12V DC** Gear Motors w/ Encoders
-- Emergency-Stop Button
-- Supporting power + wiring hardware 
+- Arduino **Mega 2560**  
+- **(x2)** Dual VNH5019 Motor Shield  
+- **(x4)** Maverick **12V DC** Gear Motors w/ Encoders  
+- Emergency-Stop Button  
+- Supporting power + wiring hardware  
 
 ---
 
 ## FILES
-- **AG_MOTORS.ino** - Full control system (v1.1)
-- **AG_MOTORS.h** - Coming Soon
-- **AG_MOTORS.cpp** - Coming Soon
+- **AG_MOTORS.ino** — Full control system (v1.1)  
+- **AG_MOTORS.h** — Coming Soon  
+- **AG_MOTORS.cpp** — Coming Soon  
 
 ---
 
 ## OPERATING THE SYSTEM
-1. Open the '.ino' file in **Arduino IDE**.
-2. Select **Board:** Arduino Mega 2560
-3. Select the correct **COM** port.
-4. Upload code.
-5. Open the Serial Monitor ('115200') to view the prompts/commands.
+1. Open the `.ino` file in **Arduino IDE**  
+2. Select **Board:** Arduino Mega 2560  
+3. Select the correct **COM** port  
+4. Upload code  
+5. Open the Serial Monitor (`115200`) to view the prompts/commands  
 
 ---
 
 ## COMMANDS
-- **[SPACEBAR]** -> Start the full sequence
-- **[1]-[4]** -> Test motors, 1-4
-- **[S]** -> Stop
+- **[SPACEBAR]** → Start the full sequence  
+- **[1]-[4]** → Test motors, 1–4  
+- **[S]** → Stop  
 
 ---
 
 ## NOTES
-- I listened to Daft Punk while writing, wiring, and debugging this code.
+- I listened to Daft Punk while writing, wiring, and debugging this code.  
