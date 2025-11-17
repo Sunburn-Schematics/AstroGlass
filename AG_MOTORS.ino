@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.1
+// VERSION:   v1.1.01
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -66,12 +66,12 @@ volatile int m3PrevA = LOW;
 
 // ============== MOTOR-SPECIFIC PARAMETERS =================== //
 // M1 Plunger Parameters
-const long M1_EXTEND_COUNTS = 200;      // Extension distance in encoder counts
+const long M1_EXTEND_COUNTS = 50;      // Extension distance in encoder counts
 const long M1_HOLD_TIME     = 2000;     // Compression hold time (milliseconds)
 const int m1Speed           = 64;       // PWM speed (0-255)
 
 // M2 Platform Parameters
-const long M2_LOWER_COUNTS = 200;       // Lowering distance in encoder counts
+const long M2_LOWER_COUNTS = 50;       // Lowering distance in encoder counts
 const int m2Speed          = 64;        // PWM speed (0-255)
 
 // M3 Conveyor Parameters
@@ -670,7 +670,11 @@ bool runM2Sequence(){
   // STEP 1: Lower platform to halfway point (triggers M4)
   Serial.println("M2: Lowering to halfway point...");
   setM2Direction(1);
-  
+
+  long m2HalfwayPoint = M2_LOWER_COUNTS / 2;  // Calculate halfway dynamically
+  Serial.print("Halfway point: ");
+  Serial.println(m2HalfwayPoint);
+
   unsigned long startTime = millis();
   while (abs(getM2Position()) < 100){
     if (emergencyStopTriggered) emergencyStop();
