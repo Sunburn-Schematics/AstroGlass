@@ -131,6 +131,8 @@ void setSystemState(byte state);
 // M1 Functions
 void updateM1Encoder();
 long getM1Position();
+// void savedM1EncoderPos();
+// long loadM1EncoderPos();
 void setM1Direction(int dir);
 bool runM1Sequence();
 void testM1();
@@ -138,6 +140,8 @@ void testM1();
 // M2 Functions
 void updateM2Encoder();
 long getM2Position();
+// void savedM2EncoderPos();
+// long loadM2EncoderPos();
 void setM2Direction(int dir);
 bool runM2Sequence();
 void testM2();
@@ -497,6 +501,16 @@ long getM1Position(){
   return pos;
 }
 
+// Save M1 encoder position to EEPROM
+// void savedM1EncoderPos(){
+
+// }
+
+// Load M1 encoder position from EEPROM
+// long loadM1EncoderPos(){
+
+// }
+
 // Set M1 direction and speed
 void setM1Direction(int dir){
   if (dir > 0){         // Extend
@@ -522,50 +536,73 @@ bool runM1Sequence(){
   m1Position = 0;  // Reset encoder position
   
   // STEP 1: Extend plunger
-  Serial.println("Extending plunger...");
+  Serial.println("Extending plunger until resistance...");
   setM1Direction(1);
   
+  long lastPosition = 0;
+  unsigned long lastMovementTime = millis();
+  const unsigned long STALL_TIMEOUT = 200;
+  const long MIN_MOVEMENT = 2;
+
   unsigned long startTime = millis();
-  while (abs(getM1Position()) < M1_EXTEND_COUNTS){
+  while (true){
     if (emergencyStopTriggered) emergencyStop();
-    
+
+    // Check for overall timeout (safety caution)
     if (millis() - startTime > 10000){
       Serial.println("ERROR: M1 extend timeout!");
       setM1Direction(0);
       return false;
     }
-    delay(10);
-  }
-  
-  setM1Direction(0);
-  Serial.println("Extension complete");
-  
-  // STEP 2: Hold compression
-  Serial.print("Holding for ");
-  Serial.print(M1_HOLD_TIME / 1000);
-  Serial.println(" seconds...");
-  delay(M1_HOLD_TIME);
-  
-  // STEP 3: Retract plunger
-  Serial.println("Retracting plunger...");
-  m1Position = 0;  // Reset for return movement
-  setM1Direction(-1);
-  
-  startTime = millis();
-  while (abs(getM1Position()) < M1_EXTEND_COUNTS){
-    if (emergencyStopTriggered) emergencyStop();
-    
-    if (millis() - startTime > 10000){
-      Serial.println("ERROR: M1 retract timeout!");
-      setM1Direction(0);
-      return false;
+
+    long currentPosition = getM1Position();
+
+    // Check if motor is still moving
+    if (abs(currentPosition - lastPosition) > MIN_MOVEMENT){
+      lastPosition = currentPosition;
+      lastMovementTime = millis();
     }
+
+    // If no movement for STALL_TIMEOUT, we got resistance
+    if (millis() - lastMovementTime > STALL_TIMEOUT){
+      Serial.println("Resistance detected - Plunger stalled");
+      Serial.print("Position at stall: ");
+      Serial.println(currentPosition);
+      break;
+    }
+    
     delay(10);
   }
-  
-  setM1Direction(0);
-  Serial.println("=== M1 SEQUENCE COMPLETE ===");
-  return true;
+    // Step 2: Hold compression with force
+    Serial.print("Compressing for ");
+    Serial.print(M1_HOLD_TIME / 1000);
+    Serial.println(" seconds...");
+    // Motor stays powered, applying force
+    delay(M1_HOLD_TIME);
+
+    setM1Direction(0);
+    Serial.println("Compression Complete.");
+
+    // Step 3: Retract plunger to start position
+    Serial.println("Retracting plunger...");
+    long extendedPosition = getM1Position();
+    setM1Direction(-1);
+
+    startTime = millis();
+    while (abs(getM1Position()) > 10){  // Retract to ~0 (with some tolerance)
+      if (emergencyStopTriggered) emergencyStop();
+
+      if (millis() - startTime > 10000){
+        Serial.println("ERROR: M1 retract timeout!");
+        setM1Direction(0);
+        return false;
+      }
+      delay(10);
+    }
+
+    setM1Direction(0);
+    Serial.println("=== M1 SEQUENCE COMPLETE ===");
+    return true;
 }
 
 // Test M1 motor - Full rotation forward and reverse
@@ -642,6 +679,16 @@ long getM2Position(){
   interrupts();
   return pos;
 }
+
+// Save M2 encoder position to EEPROM
+// void savedM2EncoderPos(){
+
+// }
+
+// Load M2 encoder position from EEPROM
+// long loadM2EncoderPos(){
+
+// }
 
 // Set M2 direction and speed
 void setM2Direction(int dir){
