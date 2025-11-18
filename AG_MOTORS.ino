@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.3
+// VERSION:   v1.3.1
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -67,11 +67,11 @@ volatile int m3PrevA = LOW;
 // ============== MOTOR-SPECIFIC PARAMETERS =================== //
 // M1 Plunger Parameters
 const long M1_EXTEND_COUNTS = 50;      // Extension distance in encoder counts
-const long M1_HOLD_TIME     = 2000;     // Compression hold time (milliseconds)
+const long M1_HOLD_TIME     = 1000;     // Compression hold time (milliseconds)
 const int m1Speed           = 64;       // PWM speed (0-255)
 
 // M2 Platform Parameters
-const long M2_LOWER_COUNTS = 50;       // Lowering distance in encoder counts
+const long M2_LOWER_COUNTS = 50;        // Lowering distance in encoder counts
 const int m2Speed          = 64;        // PWM speed (0-255)
 
 // M3 Conveyor Parameters
@@ -129,6 +129,7 @@ void stopAllMotors();
 bool allMotorsToSafePos();
 bool checkEmergencyStop();
 void setSystemState(byte state);
+void printProgressBar(int step, int totalSteps, const char* stepName);
 
 // M1 Functions
 void updateM1Encoder();
@@ -248,28 +249,55 @@ bool checkMotorFaults(){
 // Validate EEPROM data and reset if corrupted
 bool validateAndFixEEPROM(){
   Serial.println("Validating EEPROM data...");
+  bool allValid = true;
   
-  long savedPos;
-  EEPROM.get(M3_EEPROM_ADDR_POS, savedPos);
+  // Check M1 position
+  long savedM1Pos;
+  EEPROM.get(M1_EEPROM_ADDR_POS, savedM1Pos);
+  Serial.print("M1 EEPROM value: ");
+  Serial.println(savedM1Pos);
   
-  Serial.print("EEPROM value: ");
-  Serial.println(savedPos);
+  if (savedM1Pos < -500 || savedM1Pos > 500){
+    Serial.println("WARNING: M1 EEPROM corrupted - resetting to 0");
+    long zeroValue = 0;
+    EEPROM.put(M1_EEPROM_ADDR_POS, zeroValue);
+    allValid = false;
+  }
   
-  // Check if value is within reasonable range
-  if (savedPos < M3_MIN_VALID_POS || savedPos > M3_MAX_VALID_POS){
-    Serial.println("WARNING: EEPROM data corrupted - resetting to 0");
-    
+  // Check M2 position
+  long savedM2Pos;
+  EEPROM.get(M2_EEPROM_ADDR_POS, savedM2Pos);
+  Serial.print("M2 EEPROM value: ");
+  Serial.println(savedM2Pos);
+  
+  if (savedM2Pos < -500 || savedM2Pos > 500){
+    Serial.println("WARNING: M2 EEPROM corrupted - resetting to 0");
+    long zeroValue = 0;
+    EEPROM.put(M2_EEPROM_ADDR_POS, zeroValue);
+    allValid = false;
+  }
+  
+  // Check M3 position
+  long savedM3Pos;
+  EEPROM.get(M3_EEPROM_ADDR_POS, savedM3Pos);
+  Serial.print("M3 EEPROM value: ");
+  Serial.println(savedM3Pos);
+  
+  if (savedM3Pos < M3_MIN_VALID_POS || savedM3Pos > M3_MAX_VALID_POS){
+    Serial.println("WARNING: M3 EEPROM corrupted - resetting to 0");
     long zeroValue = 0;
     EEPROM.put(M3_EEPROM_ADDR_POS, zeroValue);
-    
-    Serial.println("EEPROM reset complete");
-    Serial.println("");
-    return true;
-  } else {
-    Serial.println("EEPROM data valid");
-    Serial.println("");
-    return true;
+    allValid = false;
   }
+  
+  if (allValid){
+    Serial.println("All EEPROM data valid");
+  } else {
+    Serial.println("EEPROM corrupted - all positions reset to 0");
+  }
+  
+  Serial.println("");
+  return true;
 }
 
 // Check if system was powered off during operation
@@ -297,7 +325,7 @@ bool waitForRun(){
   Serial.println("Astro Motor Commands: [SPACE] = Start | [1] - [4] = Test Motor | [S] = Stop");
   
   unsigned long startWaitTime = millis();
-  const unsigned long WAIT_TIMEOUT = 60000;  // 60 second timeout
+  const unsigned long WAIT_TIMEOUT = 120000;  // 120 second timeout
 
   while (true){
     // Check for timeout
@@ -354,7 +382,6 @@ void stopAllMotors(){
   md.setM1Speed(0);       // Stop M4 belt
 }
 
-// Move all motors to safe positions
 // Move all motors to safe positions
 bool allMotorsToSafePos(){
   bool allSuccess = true;
@@ -555,6 +582,26 @@ void stopMotor(int motorNum){
   } else {
     Serial.println("Invalid motor number");
   }
+}
+
+// Display progress bar in serial monitor
+void printProgressBar(int step, int totalSteps, const char* stepName){
+  int barWidth = 30; // Width of the bar
+  float progress = (float)step / totalSteps;
+  int pos = barWidth * progress;
+
+  Serial.print("[");
+  for (int i = 0; i < barWidth; i++){
+    if (i < pos) Serial.print("=");
+    else if (i == pos) Serial.print(">");
+    else Serial.print(" ");
+  }
+  Serial.print("] ");
+
+  int percent = progress * 100;
+  Serial.print(percent);
+  Serial.print("% - ");
+  Serial.println(stepName);
 }
 
 // =================== M1 PLUNGER FUNCTIONS =================== //
@@ -818,7 +865,7 @@ bool runM2Sequence(){
   Serial.println(m2HalfwayPoint);
 
   unsigned long startTime = millis();
-  while (abs(getM2Position()) < 100){
+  while (abs(getM2Position()) < m2HalfwayPoint){
     if (emergencyStopTriggered) emergencyStop();
     
     if (millis() - startTime > 10000){
@@ -1142,7 +1189,7 @@ void runM4Cont(int speed){
   Serial.println(speed);
 }
 
-// Test M4 motor - Forward and reverse
+// Test M4 motor - Forward and reverse (USING M2 OUTPUT FOR TESTING)
 void testM4(){
   Serial.println("Testing M4 - Forward/Reverse Test");
   Serial.println("==================================");
@@ -1239,7 +1286,14 @@ void loop() {
   Serial.println("=== STARTING SEQUENCE ===");
   setSystemState(SYSTEM_RUNNING);
 
+  // Startup delay before full sequence start
+  Serial.println("Sequence beings in five seconds...");
+  delay(5000);
+
+  const int TOTAL_STEPS = 7;
+
   // STEP 1: M3 lowers 90 degrees
+  printProgressBar(1, TOTAL_STEPS, "M3 Lowering");
   if (!moveM3ToPos(CONST_90_DEG, -m3Speed, "Lowering")){
     Serial.println("Sequence aborted: M3 lowering failed");
     setSystemState(SYSTEM_SAFE);
@@ -1252,20 +1306,24 @@ void loop() {
   delay(500);
 
   // STEP 2: Wait 3 seconds
+  printProgressBar(2, TOTAL_STEPS, "Pause");
   delay(3000);
   
   // STEP 3: M1 plunger sequence (extend, hold, retract)
+  printProgressBar(3, TOTAL_STEPS, "SQUEEEEZE");
   if (!runM1Sequence()){
     Serial.println("Sequence aborted: M1 failed");
     setSystemState(SYSTEM_SAFE);
     return;
   }
 
-  // STEP 4: Wait 2 seconds before M2 activates
+  // STEP 4: Wait 1 second before M2 activates
+  printProgressBar(4, TOTAL_STEPS, "Hol' on now");
   Serial.println("Waiting 2 seconds before M2 activates...");
   delay(2000);
 
   // STEP 5: M2 platform + M4 belt (coordinated sequence)
+  printProgressBar(5, TOTAL_STEPS, "Let's bring 'er home");
   if (!runM2Sequence()){
     Serial.println("Sequence aborted: M2 failed");
     setSystemState(SYSTEM_SAFE);
@@ -1273,9 +1331,11 @@ void loop() {
   }
 
   // STEP 6: Wait 1 second
+  printProgressBar(6, TOTAL_STEPS, "Stop. Hold up");
   delay(1000);
 
   // STEP 7: M3 raises back to home position
+  printProgressBar(7, TOTAL_STEPS, "Let's go home");
   if (!moveM3ToPos(CONST_90_DEG, m3Speed, "Raising")){
     Serial.println("Sequence aborted: M3 raising failed");
     setSystemState(SYSTEM_SAFE);
@@ -1294,9 +1354,11 @@ void loop() {
   
   setSystemState(SYSTEM_SAFE);
 
-
+  printProgressBar(7, TOTAL_STEPS, "HOORAY! We did it!");
   Serial.println("=== SEQUENCE COMPLETE ===");
   Serial.println("");
   delay(SEQUENCE_PAUSE);
 }
+
+
 
