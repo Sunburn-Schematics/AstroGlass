@@ -1,8 +1,8 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** v1.2
-**Latest Update:** 11/18/2025 at 9:32a
+**Version:** v1.3
+**Latest Update:** 11/18/2025 at 11:04a
 
 ---
 
@@ -33,7 +33,7 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 ---
 
 ## FILES
-- **AG_MOTORS.ino** — Full control system (v1.1)  
+- **AG_MOTORS.ino** — Full control system
 - **AG_MOTORS.h** — Coming Soon  
 - **AG_MOTORS.cpp** — Coming Soon  
 
