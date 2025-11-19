@@ -1,9 +1,9 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** v1.4
+**Version:** v1.5
 
-**Last Update:** 11/18/25 at 5:22p
+**Last Update:** 11/18/25 at 5:55p
 
 ---
 

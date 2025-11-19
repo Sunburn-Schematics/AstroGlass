@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.4
+// VERSION:   v1.5
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -66,21 +66,24 @@ volatile int m3PrevB = LOW;
 
 // ============== MOTOR-SPECIFIC PARAMETERS =================== //
 // M1 Plunger Parameters
-const long M1_EXTEND_COUNTS = 50;      // Extension distance in encoder counts
-const long M1_HOLD_TIME     = 1000;     // Compression hold time (milliseconds)
-const int m1Speed           = 64;       // PWM speed (0-255)
+const int M1_POSITION_TOLERANCE = 5;        // Acceptable position error (counts)
+const long M1_EXTEND_COUNTS     = 50;       // Extension distance in encoder counts
+const long M1_HOLD_TIME         = 1000;     // Compression hold time (milliseconds)
+const int m1Speed               = 64;       // PWM speed (0-255)
 
 // M2 Platform Parameters
-const long M2_LOWER_COUNTS = 50;        // Lowering distance in encoder counts
-const int m2Speed          = 64;        // PWM speed (0-255)
+const int M2_POSITION_TOLERANCE = 5;         // Acceptable position error (counts)
+const long M2_LOWER_COUNTS      = 50;        // Lowering distance in encoder counts
+const int m2Speed               = 64;        // PWM speed (0-255)
 
 // M3 Conveyor Parameters
-const long SAFE_POS_COUNTS   = 0;       // Home/safe position
-const long CONST_90_DEG      = 214;     // 90-degree movement (1/4 revolution)
-const long M3_MAX_VALID_POS  = 500;     // Maximum valid EEPROM position
-const long M3_MIN_VALID_POS  = -500;    // Minimum valid EEPROM position
-const int m3Speed            = 200;
-const int SAFE_SPEED         = 150;     // Speed for returning to safe position
+const int M3_POSITION_TOLERANCE = 10;        // Acceptable position error (counts)
+const long SAFE_POS_COUNTS      = 0;         // Home/safe position
+const long CONST_90_DEG         = 214;       // 90-degree movement (1/4 revolution)
+const long M3_MAX_VALID_POS     = 500;       // Maximum valid EEPROM position
+const long M3_MIN_VALID_POS     = -500;      // Minimum valid EEPROM position
+const int m3Speed               = 200;
+const int SAFE_SPEED            = 150;       // Speed for returning to safe position
 
 // M4 Belt Parameters
 const int m4Speed = 200;
@@ -134,6 +137,7 @@ void savedM1EncoderPos();
 long loadM1EncoderPos();
 void setM1Direction(int dir);
 bool runM1Sequence();
+bool moveM1ToPosition(long targetPosition, unsigned long timeout);
 void testM1();
 
 // M2 Functions
@@ -143,6 +147,7 @@ void savedM2EncoderPos();
 long loadM2EncoderPos();
 void setM2Direction(int dir);
 bool runM2Sequence();
+bool moveM2ToPosition(long targetPosition, unsigned long timeout);
 void testM2();
 
 // M3 Functions
@@ -382,43 +387,16 @@ bool allMotorsToSafePos(){
   long savedM1Pos = loadM1EncoderPos();
   m1Position = savedM1Pos;
   
-  unsigned long startTime = millis();
   const long M1_HOME_POSITION = 0;  // Fully retracted
   
-  // If position is extended (positive), retract
-  if (getM1Position() > M1_HOME_POSITION){
-    setM1Direction(-1);  // Retract
-    
-    while (getM1Position() > M1_HOME_POSITION){
-      if (millis() - startTime > 10000){  // 10 second timeout
-        Serial.println("M1: Timeout!");
-        setM1Direction(0);
-        allSuccess = false;
-        break;
-      }
-      delay(10);
-    }
-    
-  // If position is somehow negative, extend to home
-  } else if (getM1Position() < M1_HOME_POSITION){
-    setM1Direction(1);  // Extend
-    
-    while (getM1Position() < M1_HOME_POSITION){
-      if (millis() - startTime > 10000){
-        Serial.println("M1: Timeout!");
-        setM1Direction(0);
-        allSuccess = false;
-        break;
-      }
-      delay(10);
-    }
+  if (!moveM1ToPosition(M1_HOME_POSITION, 10000)){
+    Serial.println("M1: Failed to reach safe position!");
+    allSuccess = false;
+  } else {
+    m1Position = M1_HOME_POSITION;
+    savedM1EncoderPos();
+    Serial.println("M1: Safe");
   }
-  
-  // Stop M1 and save position
-  setM1Direction(0);
-  m1Position = M1_HOME_POSITION;
-  savedM1EncoderPos();
-  Serial.println("M1: Safe");
   
   // M2 - Platform: Return to home position (fully raised)
   Serial.println("M2: Moving to safe position...");
@@ -426,43 +404,16 @@ bool allMotorsToSafePos(){
   long savedM2Pos = loadM2EncoderPos();
   m2Position = savedM2Pos;
   
-  startTime = millis();
   const long M2_HOME_POSITION = 0;  // Fully raised
   
-  // If position is lowered (positive), raise
-  if (getM2Position() > M2_HOME_POSITION){
-    setM2Direction(-1);  // Raise
-    
-    while (getM2Position() > M2_HOME_POSITION){
-      if (millis() - startTime > 10000){  // 10 second timeout
-        Serial.println("M2: Timeout!");
-        setM2Direction(0);
-        allSuccess = false;
-        break;
-      }
-      delay(10);
-    }
-    
-  // If position is somehow negative, lower to home
-  } else if (getM2Position() < M2_HOME_POSITION){
-    setM2Direction(1);  // Lower
-    
-    while (getM2Position() < M2_HOME_POSITION){
-      if (millis() - startTime > 10000){
-        Serial.println("M2: Timeout!");
-        setM2Direction(0);
-        allSuccess = false;
-        break;
-      }
-      delay(10);
-    }
+  if (!moveM2ToPosition(M2_HOME_POSITION, 10000)){
+    Serial.println("M2: Failed to reach safe position!");
+    allSuccess = false;
+  } else {
+    m2Position = M2_HOME_POSITION;
+    savedM2EncoderPos();
+    Serial.println("M2: Safe");
   }
-  
-  // Stop M2 and save position
-  setM2Direction(0);
-  m2Position = M2_HOME_POSITION;
-  savedM2EncoderPos();
-  Serial.println("M2: Safe");
   
   // M3 - Conveyor: Return to home position
   Serial.println("M3: Moving to safe position...");
@@ -470,46 +421,35 @@ bool allMotorsToSafePos(){
   long savedPos = loadM3EncoderPos();
   m3Position = savedPos;
   
-  startTime = millis();
+  unsigned long startTime = millis();
 
-  // If position is above safe position, lower
-  if (getM3Position() > SAFE_POS_COUNTS){
-    md.setM2Speed(SAFE_SPEED);
-    
-    while (getM3Position() > SAFE_POS_COUNTS){
-      if (millis() - startTime > MOTOR_TIMEOUT_HOME){
-        Serial.println("M3: Timeout!");
-        md.setM2Speed(0);
-        allSuccess = false;
-        break;
-      }
-      if (checkMotorFaults()){
-        allSuccess = false;
-        break;
-      }
-      delay(10);
+  // Closed-loop control for M3
+  while (abs(getM3Position() - SAFE_POS_COUNTS) > M3_POSITION_TOLERANCE){
+    if (millis() - startTime > MOTOR_TIMEOUT_HOME){
+      Serial.println("M3: Timeout!");
+      md.setM2Speed(0);
+      allSuccess = false;
+      break;
+    }
+    if (checkMotorFaults()){
+      allSuccess = false;
+      break;
     }
     
-  // If position is below safe position, raise
-  } else if (getM3Position() < SAFE_POS_COUNTS){
-    md.setM2Speed(-SAFE_SPEED);
+    long error = SAFE_POS_COUNTS - getM3Position();
     
-    while (getM3Position() < SAFE_POS_COUNTS){
-      if (millis() - startTime > MOTOR_TIMEOUT_HOME){
-        Serial.println("M3: Timeout!");
-        md.setM2Speed(0);
-        allSuccess = false;
-        break;
-      }
-      if (checkMotorFaults()){
-        allSuccess = false;
-        break;
-      }
-      delay(10);
+    if (abs(error) <= M3_POSITION_TOLERANCE){
+      md.setM2Speed(0);
+      break;
+    } else if (error > 0){
+      md.setM2Speed(SAFE_SPEED);
+    } else {
+      md.setM2Speed(-SAFE_SPEED);
     }
+    
+    delay(10);
   }
 
-  // Stop M3 and save position
   md.setM2Speed(0);
   m3Position = SAFE_POS_COUNTS;
   savedM3EncoderPos();
@@ -735,6 +675,43 @@ bool runM1Sequence(){
     savedM1EncoderPos();
     Serial.println("=== M1 SEQUENCE COMPLETE ===");
     return true;
+}
+
+// Moving m1 to the target location with a closed loop controller
+bool moveM1ToPosition(long targetPosition, unsigned long timeout){
+  Serial.print("M1: Moving to position ");
+  Serial.println(targetPosition);
+
+  unsigned long startTime = millis();
+
+  while (abs(getM1Position() - targetPosition) > M1_POSITION_TOLERANCE){
+    // Checks for timeout
+    if (millis() - startTime > timeout){
+      Serial.println("ERROR: M1 position timeout!");
+      setM1Direction(0);
+      return false;
+    }
+
+    // Calculate the error
+    long error = targetPosition - getM1Position();
+
+    // P-Controller
+    if (abs(error) <= M1_POSITION_TOLERANCE){
+      setM1Direction(0);
+      break;
+    } else if (error > 0){
+      setM1Direction(1);  // Extend
+    } else {
+      setM1Direction(-1); // Retract
+    }
+
+    delay(10);
+  }
+
+  setM1Direction(0);
+  Serial.print("M1: Reached position");
+  Serial.println(getM1Position());
+  return true;
 }
 
 // Test M1 motor - Full rotation forward and reverse
@@ -965,6 +942,43 @@ bool runM2Sequence(){
   return true;
 }
 
+// Moving M2 to the target position with a closed loop controller
+bool moveM2ToPosition(long targetPosition, unsigned long timeout){
+  Serial.print("M2: Moving to position ");
+  Serial.println(targetPosition);
+
+  unsigned long startTime = millis();
+
+  while (abs(getM2Position() - targetPosition) > M2_POSITION_TOLERANCE){
+    // Checks for timeout
+    if (millis() - startTime > timeout){
+      Serial.println("ERROR: M2 position timeout!");
+      setM2Direction(0);
+      return false;
+    }
+
+    // Calculate the error
+    long error = targetPosition - getM2Position();
+
+    // P-Controller
+    if (abs(error) <= M2_POSITION_TOLERANCE){
+      setM2Direction(0);
+      break;
+    } else if (error > 0){
+      setM2Direction(1);  // Lower
+    } else {
+      setM2Direction(-1); // Raise
+    }
+
+    delay(10);
+  }
+
+  setM2Direction(0);
+  Serial.print("M2: Reached position");
+  Serial.println(getM2Position());
+  return true;
+}
+
 // Test M2 motor - Full rotation forward and reverse
 void testM2(){
   Serial.println("Testing M2 - Full Rotation Test");
@@ -1066,7 +1080,7 @@ long loadM3EncoderPos(){
   return savedPos;
 }
 
-// Move M3 to target position at specified speed
+// Move M3 to target position with closed-loop control
 bool moveM3ToPos(long targetCount, int speed, const char* direction){
   // Clear any faults before starting
   Serial.println("Preparing M3...");
@@ -1087,17 +1101,18 @@ bool moveM3ToPos(long targetCount, int speed, const char* direction){
   }
   
   m3Position = 0;  // Reset for relative movement
+  long targetPosition = targetCount;
   
   Serial.print("M3 ");
   Serial.print(direction);
-  Serial.println("...");
+  Serial.print(" to position ");
+  Serial.println(targetPosition);
 
-  md.setM2Speed(speed);
-  
   unsigned long startTime = millis();
-  unsigned long lastPrintTime = 0;
-
-  while (abs(getM3Position()) < targetCount){
+  
+  // Closed-loop position control
+  while (abs(getM3Position() - targetPosition) > M3_POSITION_TOLERANCE){
+    // Check for timeout
     if (millis() - startTime > MOTOR_TIMEOUT_MOVE){
       Serial.print("ERROR: M3 ");
       Serial.print(direction);
@@ -1112,15 +1127,37 @@ bool moveM3ToPos(long targetCount, int speed, const char* direction){
       return false;
     }
 
-    // Position monitoring removed for cleaner output
-    lastPrintTime = millis();
+    // Calculate error and adjust speed
+    long error = targetPosition - getM3Position();
+    int adjustedSpeed;
+    
+    // Slow down as we approach target (proportional control)
+    if (abs(error) < 50){
+      // Within 50 counts - slow speed
+      adjustedSpeed = (speed > 0) ? SAFE_SPEED : -SAFE_SPEED;
+    } else {
+      // Far from target - full speed
+      adjustedSpeed = speed;
+    }
+    
+    // Set direction based on error
+    if (abs(error) <= M3_POSITION_TOLERANCE){
+      md.setM2Speed(0);
+      break;
+    } else if (error > 0){
+      md.setM2Speed(abs(adjustedSpeed));
+    } else {
+      md.setM2Speed(-abs(adjustedSpeed));
+    }
+    
     delay(10);
   }
 
   stopMotor(3);
   Serial.print("M3 ");
   Serial.print(direction);
-  Serial.println(" complete");
+  Serial.print(" complete at position ");
+  Serial.println(getM3Position());
   return true;
 }
 
@@ -1245,7 +1282,7 @@ void setup(){
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("AstroGlass Control System v1.4");
+  Serial.println("AstroGlass Control System v1.5");
 
   // Check if system was stopped during operation
   bool emergencyDetected = checkEmergencyStop();
@@ -1349,14 +1386,14 @@ void loop(){
 
   // Reset all motor positions and mark system as safe
   m1Position = 0;
-  EEPROM.put(M1_EEPROM_ADDR_POS, 0);
+  savedM1EncoderPos();
   
   m2Position = 0;
-  EEPROM.put(M2_EEPROM_ADDR_POS, 0);
-  
+  savedM2EncoderPos();
+
   m3Position = 0;
-  EEPROM.put(M3_EEPROM_ADDR_POS, 0);
-  
+  savedM3EncoderPos();
+
   setSystemState(SYSTEM_SAFE);
 
   printProgressBar(7, TOTAL_STEPS, "HOORAY! We did it!");
