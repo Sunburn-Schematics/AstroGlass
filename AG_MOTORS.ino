@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.5
+// VERSION:   v1.5.01
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -340,7 +340,7 @@ bool waitForRun(){
         delay(5000);
         return false;
       } else if (input == 'P'){
-        Serial.println("Pedro P. Ortiz II, designed this code to work the Middle Man.");
+        Serial.println("Pedro P. Ortiz II, designed this code to work FRRED.");
         delay(5000);
         return false;
       } else if (input == '1'){

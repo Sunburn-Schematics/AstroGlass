@@ -1,7 +1,7 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** v1.5
+**Version:** v1.5.01
 
 **Last Update:** 11/18/25 at 5:55p
 
@@ -19,8 +19,8 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 - Uses encoders for real-time position feedback  
 - Handles **fault detection** for Dual VNH5019 motor drivers  
 - Implements a full **automated motion sequence**  
-- Using EEPROM, stores **state + encoder position**  
-- Includes a hardware **emergency stop interrupt**
+- Using EEPROM, stores **state + encoder position**
+- Has closed-loop **[P Controller]** integration to arrive "exactly" at the counts
 
 ---
 
