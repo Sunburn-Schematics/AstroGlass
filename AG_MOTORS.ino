@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.3.1
+// VERSION:   v1.4
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -45,24 +45,24 @@ const int M2_INA = 7;                   // M2 Direction A
 const int M2_INB = 8;                   // M2 Direction B
 const int M2_PWM = 11;                  // M2 PWM Speed Control
 
-// ================= EMERGENCY STOP BUTTON ====================
-const int EMERGENCY_STOP_PIN = 21;      // Hardware emergency stop
-
 // ======================= ENCODER PINS ======================= //
 // M1 Plunger Encoder
 const int m1PinA     = 18;              // Encoder Channel A (interrupt)
 const int m1PinB     = 19;              // Encoder Channel B (interrupt)
 volatile int m1PrevA = LOW;
+volatile int m1PrevB = LOW;
 
 // M2 Platform Encoder
 const int m2PinA     = 20;              // Encoder Channel A (interrupt)
-const int m2PinB     = 22;              // Encoder Channel B (non-interrupt)
+const int m2PinB     = 21;              // Encoder Channel B (interrupt)
 volatile int m2PrevA = LOW;
+volatile int m2PrevB = LOW;
 
 // M3 Conveyor Encoder
 const int m3PinA     = 2;               // Encoder Channel A (interrupt)
 const int m3PinB     = 3;               // Encoder Channel B (interrupt)
 volatile int m3PrevA = LOW;
+volatile int m3PrevB = LOW;
 
 // ============== MOTOR-SPECIFIC PARAMETERS =================== //
 // M1 Plunger Parameters
@@ -108,10 +108,7 @@ volatile long m1Position = 0;       // M1 current encoder position
 volatile long m2Position = 0;       // M2 current encoder position
 volatile long m3Position = 0;       // M3 current encoder position
 
-// =================== EMERGENCY STOP FLAG ==================== //
-volatile bool emergencyStopTriggered = false;
-
-// ===== MOTOR SHIELD OBJECT =====
+// ================= MOTOR SHIELD OBJECT ====================== //
 DualVNH5019MotorShield md;
 
 // =================== FUNCTION DECLARATIONS ================== //
@@ -123,7 +120,6 @@ bool validateAndFixEEPROM();
 bool waitForRun();
 void clearSerialInput();
 void emergencyStop();
-void emergencyStopISR();
 void stopMotor(int motorNum);
 void stopAllMotors();
 bool allMotorsToSafePos();
@@ -193,16 +189,13 @@ void initializeMotors(){
   pinMode(m2PinA, INPUT_PULLUP);
   pinMode(m2PinB, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(m2PinA), updateM2Encoder, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(m2PinB), updateM2Encoder, CHANGE);
   
   // Initialize M3 encoder with both interrupt pins
   pinMode(m3PinA, INPUT_PULLUP);
   pinMode(m3PinB, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
-  
-  // Initialize emergency stop button
-  pinMode(EMERGENCY_STOP_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(EMERGENCY_STOP_PIN), emergencyStopISR, FALLING);
 }
 
 // Clear motor faults on startup
@@ -225,11 +218,6 @@ void clearMotorFaults(){
   attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
   
   Serial.println("Motor faults cleared");
-}
-
-// Emergency stop interrupt service routine
-void emergencyStopISR(){
-  emergencyStopTriggered = true;
 }
 
 // Check for motor faults on the shield
@@ -612,7 +600,6 @@ void updateM1Encoder(){
 
   // Detect edge on channel A
   if (currentA != m1PrevA){
-    // Determine direction based on channel B state
     if (currentA == HIGH){
       if (currentB == LOW) m1Position++;
       else m1Position--;
@@ -621,6 +608,18 @@ void updateM1Encoder(){
       else m1Position--;
     }
     m1PrevA = currentA;
+  }
+
+  // Detect edge on channel B
+  if (currentB != m1PrevB){
+    if (currentB == HIGH){
+      if (currentA == HIGH) m1Position++;
+      else m1Position--;
+    } else {
+      if (currentA == LOW) m1Position++;
+      else m1Position--;
+    }
+    m1PrevB = currentB;
   }
 }
 
@@ -682,8 +681,6 @@ bool runM1Sequence(){
 
   unsigned long startTime = millis();
   while (true){
-    if (emergencyStopTriggered) emergencyStop();
-
     // Check for overall timeout (safety caution)
     if (millis() - startTime > 10000){
       Serial.println("ERROR: M1 extend timeout!");
@@ -726,8 +723,6 @@ bool runM1Sequence(){
 
     startTime = millis();
     while (abs(getM1Position()) > 10){  // Retract to ~0 (with some tolerance)
-      if (emergencyStopTriggered) emergencyStop();
-
       if (millis() - startTime > 10000){
         Serial.println("ERROR: M1 retract timeout!");
         setM1Direction(0);
@@ -790,14 +785,13 @@ void testM1(){
 }
 
 // =================== M2 PLATFORM FUNCTIONS ================== //
-// M2 encoder interrupt service routine (partial quadrature)
+// M2 encoder interrupt service routine (full quadrature)
 void updateM2Encoder(){
   int currentA = digitalRead(m2PinA);
   int currentB = digitalRead(m2PinB);
 
   // Detect edge on channel A
   if (currentA != m2PrevA){
-    // Determine direction based on channel B state
     if (currentA == HIGH){
       if (currentB == LOW) m2Position++;
       else m2Position--;
@@ -806,6 +800,18 @@ void updateM2Encoder(){
       else m2Position--;
     }
     m2PrevA = currentA;
+  }
+
+  // Detect edge on channel B
+  if (currentB != m2PrevB){
+    if (currentB == HIGH){
+      if (currentA == HIGH) m2Position++;
+      else m2Position--;
+    } else {
+      if (currentA == LOW) m2Position++;
+      else m2Position--;
+    }
+    m2PrevB = currentB;
   }
 }
 
@@ -866,8 +872,6 @@ bool runM2Sequence(){
 
   unsigned long startTime = millis();
   while (abs(getM2Position()) < m2HalfwayPoint){
-    if (emergencyStopTriggered) emergencyStop();
-    
     if (millis() - startTime > 10000){
       Serial.println("ERROR: M2 halfway timeout!");
       setM2Direction(0);
@@ -901,8 +905,6 @@ bool runM2Sequence(){
   
   startTime = millis();
   while (abs(getM2Position()) < M2_LOWER_COUNTS){
-    if (emergencyStopTriggered) emergencyStop();
-    
     if (millis() - startTime > 10000){
       Serial.println("ERROR: M2 full lower timeout!");
       setM2Direction(0);
@@ -928,8 +930,6 @@ bool runM2Sequence(){
   unsigned long lastPrintTime = 0;
   
   while (abs(getM2Position()) > 5){  // Allow 5-count tolerance
-    if (emergencyStopTriggered) emergencyStop();
-    
     if (millis() - startTime > 10000){
       Serial.println("ERROR: M2 raise timeout!");
       setM2Direction(0);
@@ -1020,7 +1020,6 @@ void updateM3Encoder(){
 
   // Detect edge on channel A
   if (currentA != m3PrevA){
-    // Determine direction based on channel B state
     if (currentA == HIGH){
       if (currentB == LOW) m3Position++;
       else m3Position--;
@@ -1029,6 +1028,18 @@ void updateM3Encoder(){
       else m3Position--;
     }
     m3PrevA = currentA;
+  }
+
+  // Detect edge on channel B
+  if (currentB != m3PrevB){
+    if (currentB == HIGH){
+      if (currentA == HIGH) m3Position++;
+      else m3Position--;
+    } else {
+      if (currentA == LOW) m3Position++;
+      else m3Position--;
+    }
+    m3PrevB = currentB;
   }
 }
 
@@ -1087,8 +1098,6 @@ bool moveM3ToPos(long targetCount, int speed, const char* direction){
   unsigned long lastPrintTime = 0;
 
   while (abs(getM3Position()) < targetCount){
-    if (emergencyStopTriggered) emergencyStop();
-    
     if (millis() - startTime > MOTOR_TIMEOUT_MOVE){
       Serial.print("ERROR: M3 ");
       Serial.print(direction);
@@ -1236,7 +1245,7 @@ void setup(){
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("AstroGlass Control System v1.0.7");
+  Serial.println("AstroGlass Control System v1.4");
 
   // Check if system was stopped during operation
   bool emergencyDetected = checkEmergencyStop();
@@ -1270,11 +1279,7 @@ void setup(){
 }
 
 // ======================== MAIN LOOP ========================= //
-void loop() {
-  // Check for emergency stop
-  if (emergencyStopTriggered){
-    emergencyStop();
-  }
+void loop(){
   
   // Wait for user command
   if (!waitForRun()){
@@ -1359,6 +1364,3 @@ void loop() {
   Serial.println("");
   delay(SEQUENCE_PAUSE);
 }
-
-
-
