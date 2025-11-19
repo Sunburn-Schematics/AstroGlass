@@ -74,7 +74,7 @@ const int m1Speed               = 64;       // PWM speed (0-255)
 // M2 Platform Parameters
 const int M2_POSITION_TOLERANCE = 5;         // Acceptable position error (counts)
 const long M2_LOWER_COUNTS      = 50;        // Lowering distance in encoder counts
-const int m2Speed               = 64;        // PWM speed (0-255)
+const int m2Speed               = 255;        // PWM speed (0-255)
 
 // M3 Conveyor Parameters
 const int M3_POSITION_TOLERANCE = 10;        // Acceptable position error (counts)
@@ -86,7 +86,7 @@ const int m3Speed               = 200;
 const int SAFE_SPEED            = 150;       // Speed for returning to safe position
 
 // M4 Belt Parameters
-const int m4Speed = 200;
+const int m4Speed = 100;
 
 // Extra Parameters
 const long countsPerRev = 854;          // Maverick: 7 PPR × 2 edges × 61:1 gear
@@ -323,7 +323,7 @@ bool waitForRun(){
   while (true){
     // Check for timeout
     if (millis() - startWaitTime > WAIT_TIMEOUT){
-      Serial.println("Timeout - system idle");
+      Serial.println("Timeout - System Idle");
       delay(5000);
       return false;
     }
@@ -354,6 +354,9 @@ bool waitForRun(){
         return false;
       } else if (input == '4'){
         testM4();
+        return false;
+      } else if (input == '?'){
+        Serial.println("Thanks to Jordan, Robby, Aidan, Charles, and Brad.");
         return false;
       }
     }
@@ -990,7 +993,7 @@ void testM2(){
   setM2Direction(1);
   
   unsigned long startTime = millis();
-  while (abs(getM2Position()) < countsPerRev){
+  while (abs(getM2Position()) < countsPerRev * 10){
     if (millis() % 500 == 0) {  // Print every 500ms
       Serial.print("  M2 Count: ");
       Serial.println(getM2Position());
@@ -1011,7 +1014,7 @@ void testM2(){
   setM2Direction(-1);
   
   startTime = millis();
-  while (abs(getM2Position()) < countsPerRev){
+  while (abs(getM2Position()) < countsPerRev * 10){
     if (millis() % 500 == 0){  // Print every 500ms
       Serial.print("  M2 Count: ");
       Serial.println(getM2Position());
@@ -1266,13 +1269,13 @@ void testM4(){
   
   delay(1000);  // Pause between directions
   
-  // REVERSE: 3 seconds
-  Serial.println("REVERSE: Running for 3 seconds...");
-  md.setM1Speed(-m4Speed);
-  delay(3000);
-  md.setM1Speed(0);
-  Serial.println("Reverse complete.");
-  Serial.println("");
+  // // REVERSE: 3 seconds
+  // Serial.println("REVERSE: Running for 3 seconds...");
+  // md.setM1Speed(-m4Speed);
+  // delay(3000);
+  // md.setM1Speed(0);
+  // Serial.println("Reverse complete.");
+  // Serial.println("");
   
   Serial.println("=== M4 TEST COMPLETE ===");
 }
@@ -1317,7 +1320,6 @@ void setup(){
 
 // ======================== MAIN LOOP ========================= //
 void loop(){
-  
   // Wait for user command
   if (!waitForRun()){
     delay(250);
