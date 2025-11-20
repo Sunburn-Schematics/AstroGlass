@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.5.01
+// VERSION:   v1.5.1
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -33,6 +33,12 @@
    300: High Forward      (75%)
    400: Full Forward      (100%)
 */
+
+// ======================== MOTOR SPEEDS ====================== //
+const int m1Speed               = 64;     // PWM speed (0-255)
+const int m2Speed               = 255;    // PWM speed (0-255)
+const int m3Speed               = 200;    // Shield speed (-400-400)
+const int m4Speed               = 100;    // Shield speed (-400-400)
 
 // ==================== SHIELD 2 CONTROL PINS ================= //
 // M1 Plunger Motor
@@ -69,12 +75,10 @@ volatile int m3PrevB = LOW;
 const int M1_POSITION_TOLERANCE = 5;        // Acceptable position error (counts)
 const long M1_EXTEND_COUNTS     = 50;       // Extension distance in encoder counts
 const long M1_HOLD_TIME         = 1000;     // Compression hold time (milliseconds)
-const int m1Speed               = 64;       // PWM speed (0-255)
 
 // M2 Platform Parameters
 const int M2_POSITION_TOLERANCE = 5;         // Acceptable position error (counts)
 const long M2_LOWER_COUNTS      = 50;        // Lowering distance in encoder counts
-const int m2Speed               = 255;        // PWM speed (0-255)
 
 // M3 Conveyor Parameters
 const int M3_POSITION_TOLERANCE = 10;        // Acceptable position error (counts)
@@ -82,11 +86,7 @@ const long SAFE_POS_COUNTS      = 0;         // Home/safe position
 const long CONST_90_DEG         = 214;       // 90-degree movement (1/4 revolution)
 const long M3_MAX_VALID_POS     = 500;       // Maximum valid EEPROM position
 const long M3_MIN_VALID_POS     = -500;      // Minimum valid EEPROM position
-const int m3Speed               = 200;
 const int SAFE_SPEED            = 150;       // Speed for returning to safe position
-
-// M4 Belt Parameters
-const int m4Speed = 100;
 
 // Extra Parameters
 const long countsPerRev = 854;          // Maverick: 7 PPR × 2 edges × 61:1 gear
@@ -340,7 +340,7 @@ bool waitForRun(){
         delay(5000);
         return false;
       } else if (input == 'P'){
-        Serial.println("Pedro P. Ortiz II, designed this code to work FRRED.");
+        Serial.println("Pedro P. Ortiz II, designed this code.");
         delay(5000);
         return false;
       } else if (input == '1'){
