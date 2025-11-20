@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.5.2
+// VERSION:   v1.6
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -95,7 +95,7 @@ const long countsPerRev = 854;          // Maverick: 7 PPR × 2 edges × 61:1 ge
 const unsigned long MOTOR_TIMEOUT_MOVE  = 15000;   // M3 movement timeout (15s)
 const unsigned long MOTOR_TIMEOUT_HOME  = 15000;   // M3 homing timeout (15s)
 const unsigned long M1_ACTIVATION_DELAY = 10000;   // Unused legacy parameter
-const unsigned long M4_TOTAL_RUN_TIME   = 5000;    // M4 total run duration (5s)
+const unsigned long M4_TOTAL_RUN_TIME   = 10000;   // M4 total run duration (10s)
 const unsigned long SEQUENCE_PAUSE      = 500;     // Pause between sequences (0.5s)
 
 // ================ EEPROM CONFIGURATION ====================== //
@@ -120,7 +120,6 @@ void initializeMotors();
 void clearMotorFaults();
 bool checkMotorFaults();
 bool validateAndFixEEPROM();
-bool waitForRun();
 void clearSerialInput();
 void emergencyStop();
 void stopMotor(int motorNum);
@@ -311,57 +310,6 @@ bool checkEmergencyStop(){
 // Set system state in EEPROM
 void setSystemState(byte state){
   EEPROM.put(EEPROM_SYSTEM_STATE_ADDR, state);
-}
-
-// Wait for user input to start sequence or test motors
-bool waitForRun(){
-  clearSerialInput();
-  Serial.println("Astro Motor Commands: [SPACE] = Start | [1] - [4] = Test Motor | [S] = Stop");
-  
-  unsigned long startWaitTime = millis();
-  const unsigned long WAIT_TIMEOUT = 120000;  // 120 second timeout
-
-  while (true){
-    // Check for timeout
-    if (millis() - startWaitTime > WAIT_TIMEOUT){
-      Serial.println("Timeout - System Idle");
-      delay(5000);
-      return false;
-    }
-    
-    // Check for serial input
-    if (Serial.available() > 0){
-      char input = Serial.read();
-
-      if (input == ' ') {
-        Serial.println("Starting full sequence...");
-        return true;
-      } else if (input == 'S' || input == 's'){
-        Serial.println("System Idle");
-        delay(5000);
-        return false;
-      } else if (input == 'P'){
-        Serial.println("Pedro P. Ortiz II, designed this code.");
-        delay(5000);
-        return false;
-      } else if (input == '1'){
-        testM1();
-        return false;
-      } else if (input == '2'){
-        testM2();
-        return false;
-      } else if (input == '3'){
-        testM3();
-        return false;
-      } else if (input == '4'){
-        testM4();
-        return false;
-      } else if (input == '?'){
-        Serial.println("Thanks to Jordan, Robby, Aidan, Charles, and Brad.");
-        return false;
-      }
-    }
-  }
 }
 
 // Clear serial input buffer
@@ -1291,7 +1239,7 @@ void setup(){
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("AstroGlass Control System v1.5");
+  Serial.println("AstroGlass Control System v1.6");
 
   // Check if system was stopped during operation
   bool emergencyDetected = checkEmergencyStop();
@@ -1326,87 +1274,269 @@ void setup(){
 
 // ======================== MAIN LOOP ========================= //
 void loop(){
-  // Wait for user command
-  if (!waitForRun()){
-    delay(250);
-    return;
-  }
+  clearSerialInput();
 
   Serial.println("");
-  Serial.println("=== STARTING SEQUENCE ===");
-  setSystemState(SYSTEM_RUNNING);
+  Serial.println("========================================");
+  Serial.println("   MANUAL SEQUENCE CONTROL MODE");
+  Serial.println("========================================");
+  Serial.println("Motor Control Keys:");
+  Serial.println("  [1] - M1 Plunger Sequence");
+  Serial.println("  [2] - M2 Platform Sequence");
+  Serial.println("  [3] - M3 Lower to 90°");
+  Serial.println("  [4] - M3 Raise up 90°");
+  Serial.println("  [5] - M4 Belt Run (7 seconds)");
+  Serial.println("");
+  Serial.println("Position Controls:");
+  Serial.println("  [H] - Home All Motors");
+  Serial.println("  [R] - Reset All Positions to Zero");
+  Serial.println("");
+  Serial.println("Testing:");
+  Serial.println("  [T1] - Test M1");
+  Serial.println("  [T2] - Test M2");
+  Serial.println("  [T3] - Test M3");
+  Serial.println("  [T4] - Test M4");
+  Serial.println("");
+  Serial.println("System:");
+  Serial.println("  [S] - Show Current Positions");
+  Serial.println("  [?] - Team Credits");
+  Serial.println("========================================");
 
-  // Startup delay before full sequence start
-  Serial.println("Sequence beings in five seconds...");
-  delay(5000);
+  // Wait for the input
+  while (true) {
+    if (Serial.available() > 0){
+      char input = Serial.read();
+      clearSerialInput();
 
-  const int TOTAL_STEPS = 7;
+      // ========== MOTOR CONTROL COMMANDS ========== //
+      if (input == '1'){
+        Serial.println("");
+        Serial.println(">>> RUNNING M1 <<<");
+        setSystemState(SYSTEM_RUNNING);
 
-  // STEP 1: M3 lowers 90 degrees
-  printProgressBar(1, TOTAL_STEPS, "M3 Lowering");
-  if (!moveM3ToPos(CONST_90_DEG, -m3Speed, "Lowering")){
-    Serial.println("Sequence aborted: M3 lowering failed");
-    setSystemState(SYSTEM_SAFE);
-    return;
+        printProgressBar(0, 1, "M1 Activated");
+
+        if (runM1Sequence()){
+          printProgressBar(1, 1, "M1 Complete");
+          Serial.println("M1 Sequence Complete");
+        } else {
+          Serial.println("M1 Sequence Failed");
+        }
+
+        setSystemState(SYSTEM_SAFE);
+        break;
+
+      } else if (input == '2'){
+        // M2 Platform Sequence
+        Serial.println("");
+        Serial.println(">>> RUNNING M2 <<<");
+        setSystemState(SYSTEM_RUNNING);
+
+        printProgressBar(0, 1, "Starting M2");
+
+        if (runM2Sequence()){
+          printProgressBar(1, 1, "M2 Complete");
+          Serial.println("M2 Sequence Complete");
+        } else {
+          Serial.println("M2 Sequence Failed");
+        }
+
+        setSystemState(SYSTEM_SAFE);
+        break;
+
+      } else if (input == '3'){
+        // M3 Lower 90 degrees
+        Serial.println("");
+        Serial.println(">>> LOWERING M3 90 DEGREES <<<");
+        setSystemState(SYSTEM_RUNNING);
+
+        printProgressBar(0, 1, "Lowering M3");
+
+        if (moveM3ToPos(CONST_90_DEG, -m3Speed, "Lowering")){
+          printProgressBar(1, 1, "M3 Lowered");
+          Serial.println("M3 Lowering Complete");
+        } else {
+          Serial.println("M3 Lowering Failed");
+        }
+
+        setSystemState(SYSTEM_SAFE);
+        break;
+
+      } else if (input == '4'){
+        // M3 Raise 90 degrees
+        Serial.println("");
+        Serial.println(">>> RAISING M3 90 DEGREES <<<");
+        setSystemState(SYSTEM_RUNNING);
+
+        printProgressBar(0, 1, "Raising M3");
+
+        if (moveM3ToPos(CONST_90_DEG, m3Speed, "Raising")){
+          printProgressBar(1, 1, "M3 Raised");
+          Serial.println("M3 Raising Complete");
+        } else {
+          Serial.println("M3 Raising Failed");
+        }
+
+        setSystemState(SYSTEM_SAFE);
+        break;
+
+      } else if (input == '5'){
+        // M4 Belt Run
+        Serial.println("");
+        Serial.println(">>> RUNNING M4 BELT FOR 10 SECONDS <<<");
+        setSystemState(SYSTEM_RUNNING);
+
+        printProgressBar(0, 1, "Starting M4");
+
+        // Clear faults before M4
+        Serial.println("Clearing faults before M4...");
+        md.setM1Speed(0);
+        delay(100);
+        md.init();
+        delay(500);
+
+        // Re-attach M3 encoder
+        pinMode(m3PinA, INPUT_PULLUP);
+        pinMode(m3PinB, INPUT_PULLUP);
+        attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
+        attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
+        delay(500);
+
+        runM4Cont(m4Speed);
+        delay(M4_TOTAL_RUN_TIME);
+        md.setM1Speed(0);
+
+        printProgressBar(1, 1, "M4 Complete");
+        Serial.println("M4 Belt Complete");
+        setSystemState(SYSTEM_SAFE);
+        break;
+
+      // ========== POSITION CONTROL COMMANDS ========== //
+      } else if (input == 'H' || input == 'h'){
+        // Home All Motors
+        Serial.println("");
+        Serial.println(">>> HOMING ALL MOTORS <<<");
+        setSystemState(SYSTEM_RUNNING);
+
+        printProgressBar(0, 4, "Homing M1");
+
+        if (allMotorsToSafePos()){
+          printProgressBar(4, 4, "All Motors Homed");
+          Serial.println("All Motors Homed");
+        } else {
+          Serial.println("Homing Failed!");
+        }
+
+        setSystemState(SYSTEM_SAFE);
+        break;
+
+      } else if (input == 'R' || input == 'r'){
+        // Reset All Positions
+        Serial.println("");
+        Serial.println(">>> RESETTING ALL POSITIONS TO ZERO <<<");
+
+        m1Position = 0;
+        savedM1EncoderPos();
+        Serial.println("M1 position reset to 0");
+
+        m2Position = 0;
+        savedM2EncoderPos();
+        Serial.println("M2 position reset to 0");
+
+        m3Position = 0;
+        savedM3EncoderPos();
+        Serial.println("M3 position reset to 0");
+
+        Serial.println("All Positions Reset");
+        break;
+
+      // ========== SYSTEM INFO COMMANDS ========== //
+      } else if (input == 'S' || input == 's'){
+        // Show Current Positions
+        Serial.println("");
+        Serial.println("========================================");
+        Serial.println("     CURRENT MOTOR POSITIONS");
+        Serial.println("========================================");
+        Serial.print("M1 (Plunger):  ");
+        Serial.print(getM1Position());
+        Serial.println(" counts");
+
+        Serial.print("M2 (Platform): ");
+        Serial.print(getM2Position());
+        Serial.println(" counts");
+
+        Serial.print("M3 (Conveyor): ");
+        Serial.print(getM3Position());
+        Serial.println(" counts");
+
+        Serial.println("========================================");
+        Serial.println("");
+        break;
+
+      // ========== TEST COMMANDS ========== //
+      } else if (input == 'T' || input == 't'){
+        Serial.println("Waiting for test number (1-4)...");
+
+        unsigned long testWaitStart = millis();
+        while (millis() - testWaitStart < 5000){  // 5 second timeout
+          if (Serial.available() > 0){
+            char testNum = Serial.read();
+            clearSerialInput();
+
+            if (testNum == '1'){
+              Serial.println("");
+              Serial.println(">>> TESTING M1 - FULL ROTATION <<<");
+              testM1();
+              break;
+            } else if (testNum == '2'){
+              Serial.println("");
+              Serial.println(">>> TESTING M2 - FULL ROTATION <<<");
+              testM2();
+              break;
+            } else if (testNum == '3'){
+              Serial.println("");
+              Serial.println(">>> TESTING M3 - 90 DEGREES <<<");
+              testM3();
+              break;
+            } else if (testNum == '4'){
+              Serial.println("");
+              Serial.println(">>> TESTING M4 - BELT <<<");
+              testM4();
+              break;
+            } else {
+              Serial.println("Invalid test number. Use 1, 2, 3, or 4");
+              break;
+            }
+          }
+          delay(10);
+        }
+
+        if (millis() - testWaitStart >= 5000){
+          Serial.println("Test command timeout. Please try again.");
+        }
+        break;
+
+      // ========== CREDITS ========== //
+      } else if (input == '?'){
+        Serial.println("");
+        Serial.println("========================================");
+        Serial.println("           TEAM CREDITS");
+        Serial.println("========================================");
+        Serial.println("Thanks to: Jordan, Robby, Aidan,");
+        Serial.println("           Charles, and Brad");
+        Serial.println("========================================");
+        Serial.println("");
+        break;
+
+      } else {
+        Serial.println("Invalid Command dude, try again.");
+        break;
+      }
+    }
+
+    delay(10);
   }
 
-  // Clear M3 fault after lowering
-  Serial.println("Clearing M3 fault after lowering...");
-  md.setM2Speed(0);
   delay(500);
-
-  // STEP 2: Wait 3 seconds
-  printProgressBar(2, TOTAL_STEPS, "Pause");
-  delay(3000);
-  
-  // STEP 3: M1 plunger sequence (extend, hold, retract)
-  printProgressBar(3, TOTAL_STEPS, "SQUEEEEZE");
-  if (!runM1Sequence()){
-    Serial.println("Sequence aborted: M1 failed");
-    setSystemState(SYSTEM_SAFE);
-    return;
-  }
-
-  // STEP 4: Wait 1 second before M2 activates
-  printProgressBar(4, TOTAL_STEPS, "Hol' on now");
-  Serial.println("Waiting 2 seconds before M2 activates...");
-  delay(2000);
-
-  // STEP 5: M2 platform + M4 belt (coordinated sequence)
-  printProgressBar(5, TOTAL_STEPS, "Let's bring 'er home");
-  if (!runM2Sequence()){
-    Serial.println("Sequence aborted: M2 failed");
-    setSystemState(SYSTEM_SAFE);
-    return;
-  }
-
-  // STEP 6: Wait 1 second
-  printProgressBar(6, TOTAL_STEPS, "Stop. Hold up");
-  delay(1000);
-
-  // STEP 7: M3 raises back to home position
-  printProgressBar(7, TOTAL_STEPS, "Let's go home");
-  if (!moveM3ToPos(CONST_90_DEG, m3Speed, "Raising")){
-    Serial.println("Sequence aborted: M3 raising failed");
-    setSystemState(SYSTEM_SAFE);
-    return;
-  }
-
-  // Reset all motor positions and mark system as safe
-  m1Position = 0;
-  savedM1EncoderPos();
-  
-  m2Position = 0;
-  savedM2EncoderPos();
-
-  m3Position = 0;
-  savedM3EncoderPos();
-
-  setSystemState(SYSTEM_SAFE);
-
-  printProgressBar(7, TOTAL_STEPS, "HOORAY! We did it!");
-  Serial.println("=== SEQUENCE COMPLETE ===");
-  Serial.println("");
-  delay(SEQUENCE_PAUSE);
 }
 
