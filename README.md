@@ -1,7 +1,7 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** v1.6
+**Version:** v1.6.01
 
 **Last Update:** 11/20/25 at 10:40a
 
@@ -50,9 +50,12 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 ---
 
 ## COMMANDS
-- **[SPACEBAR]** → Start the full sequence  
-- **[1]-[4]** → Test motors, 1–4  
-- **[S]** → Stop  
+- **[1]-[5]** → Run different parts of the sequence
+- **[T1]-[T4]** → Test motors, 1–4
+- **[H]** → Have all motors go to their home position
+- **[R]** → Reset all motor positions to zero
+- **[S]** → Show all current motor positions
+- **[?]** → Team Credits 
 
 ---
 
