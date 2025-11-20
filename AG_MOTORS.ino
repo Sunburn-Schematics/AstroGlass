@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.5.1
+// VERSION:   v1.5.2
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -155,6 +155,7 @@ void updateM3Encoder();
 long getM3Position();
 void savedM3EncoderPos();
 long loadM3EncoderPos();
+void brakeM3();
 bool moveM3ToPos(long targetCount, int speed, const char* direction);
 void testM3();
 
@@ -453,7 +454,7 @@ bool allMotorsToSafePos(){
     delay(10);
   }
 
-  md.setM2Speed(0);
+  brakeM3();
   m3Position = SAFE_POS_COUNTS;
   savedM3EncoderPos();
   Serial.println("M3: Safe");
@@ -504,7 +505,7 @@ void stopMotor(int motorNum){
     savedM2EncoderPos();
     Serial.println("M2 stopped");
   } else if (motorNum == 3){
-    md.setM2Speed(0);
+    brakeM3();
     savedM3EncoderPos();
     Serial.println("M3 stopped");
   } else if (motorNum == 4){
@@ -602,7 +603,7 @@ void setM1Direction(int dir){
   } else {              // Stop
     digitalWrite(M1_INA, LOW);
     digitalWrite(M1_INB, LOW);
-    analogWrite(M1_PWM, 0);
+    analogWrite(M1_PWM, 255);
   }
 }
 
@@ -831,7 +832,7 @@ void setM2Direction(int dir){
   } else {              // Stop
     digitalWrite(M2_INA, LOW);
     digitalWrite(M2_INB, LOW);
-    analogWrite(M2_PWM, 0);
+    analogWrite(M2_PWM, 255);
   }
 }
 
@@ -1083,6 +1084,10 @@ long loadM3EncoderPos(){
   return savedPos;
 }
 
+void brakeM3(){
+  md.setM2Brake(400);   // Maximum brake force
+}
+
 // Move M3 to target position with closed-loop control
 bool moveM3ToPos(long targetCount, int speed, const char* direction){
   // Clear any faults before starting
@@ -1156,7 +1161,8 @@ bool moveM3ToPos(long targetCount, int speed, const char* direction){
     delay(10);
   }
 
-  stopMotor(3);
+  brakeM3();
+  savedM3EncoderPos();
   Serial.print("M3 ");
   Serial.print(direction);
   Serial.print(" complete at position ");
@@ -1166,7 +1172,7 @@ bool moveM3ToPos(long targetCount, int speed, const char* direction){
 
 // Test M3 motor - Full rotation forward and reverse
 void testM3(){
-  Serial.println("Testing M3 - Full Rotation Test");
+  Serial.println("Testing M3 - 90 Degree Test");
   Serial.println("=================================");
   
   // Clear faults before testing
@@ -1190,11 +1196,11 @@ void testM3(){
   m3Position = 0;
   
   // FORWARD: Full rotation
-  Serial.println("FORWARD: One full rotation...");
+  Serial.println("FORWARD: 90 Degrees...");
   md.setM2Speed(m3Speed);
   
   unsigned long startTime = millis();
-  while (abs(getM3Position()) < countsPerRev){
+  while (abs(getM3Position()) < CONST_90_DEG){
     if (millis() % 500 == 0){  // Print every 500ms
       Serial.print("  M3 Count: ");
       Serial.println(getM3Position());
@@ -1210,12 +1216,12 @@ void testM3(){
   delay(1000);  // Pause between directions
   
   // REVERSE: Full rotation back
-  Serial.println("REVERSE: One full rotation...");
+  Serial.println("REVERSE: 90 Degrees...");
   m3Position = 0;  // Reset counter
   md.setM2Speed(-m3Speed);
   
   startTime = millis();
-  while (abs(getM3Position()) < countsPerRev){
+  while (abs(getM3Position()) < CONST_90_DEG){
     if (millis() % 500 == 0){  // Print every 500ms
       Serial.print("  M3 Count: ");
       Serial.println(getM3Position());
@@ -1403,3 +1409,4 @@ void loop(){
   Serial.println("");
   delay(SEQUENCE_PAUSE);
 }
+
