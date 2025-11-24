@@ -1,9 +1,9 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** v1.6.1
+**Version:** v1.6.3
 
-**Last Update:** 11/23/25 at 11:55a
+**Last Update:** 11/23/25 at 10:34p
 
 ---
 
@@ -60,4 +60,4 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 ---
 
 ## NOTES
-- Nothing to see here.
+- "Without Music, Life Would Be A Mistake."

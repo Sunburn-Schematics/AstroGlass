@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.6.1
+// VERSION:   v1.6.3
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -44,12 +44,12 @@ const int m4Speed = 100;    // Shield speed (-400-400)
 // M1 Plunger Motor
 const int M1_INA = 30;      // M1 Direction A
 const int M1_INB = 31;      // M1 Direction B
-const int M1_PWM = 12;      // M1 PWM Speed Control
+const int M1_PWM = 11;      // M1 PWM Speed Control
 
 // M2 Platform Motor
 const int M2_INA = 7;       // M2 Direction A
 const int M2_INB = 8;       // M2 Direction B
-const int M2_PWM = 11;      // M2 PWM Speed Control
+const int M2_PWM = 12;      // M2 PWM Speed Control
 
 // ======================= ENCODER PINS ======================= //
 // M1 Plunger Encoder
@@ -72,13 +72,13 @@ volatile int m3PrevB = LOW;
 
 // ============== MOTOR-SPECIFIC PARAMETERS =================== //
 // M1 Plunger Parameters
-const int M1_POSITION_TOLERANCE = 5;        // Acceptable position error (counts)
-const long M1_EXTEND_COUNTS     = 50;       // Extension distance in encoder counts
-const long M1_HOLD_TIME         = 1000;     // Compression hold time (milliseconds)
+const int M1_POSITION_TOLERANCE = 50;        // Acceptable position error (counts)
+const long M1_EXTEND_COUNTS     = 44408;     // Extension distance: 52 rotations
+const long M1_HOLD_TIME         = 1000;      // Compression hold time (milliseconds)
 
 // M2 Platform Parameters
-const int M2_POSITION_TOLERANCE = 5;         // Acceptable position error (counts)
-const long M2_LOWER_COUNTS      = 90;        // Lowering distance in encoder counts
+const int M2_POSITION_TOLERANCE = 50;        // Acceptable position error (counts)
+const long M2_LOWER_COUNTS      = 78568;     // Lowering distance: 92 rotations
 
 // M3 Conveyor Parameters
 const int M3_POSITION_TOLERANCE = 10;        // Acceptable position error (counts)
@@ -94,9 +94,9 @@ const long countsPerRev = 854;          // Maverick: 7 PPR × 2 edges × 61:1 ge
 // ===================== TIMING PARAMETERS ==================== //
 const unsigned long MOTOR_TIMEOUT_MOVE  = 15000;   // M3 movement timeout (15s)
 const unsigned long MOTOR_TIMEOUT_HOME  = 15000;   // M3 homing timeout (15s)
-const unsigned long M1_ACTIVATION_DELAY = 10000;   // Unused legacy parameter
+const unsigned long M1_TIMEOUT          = 75000;   // M1 movement timeout (75s)
+const unsigned long M2_TIMEOUT          = 120000;  // M2 movement timeout (120s)
 const unsigned long M4_TOTAL_RUN_TIME   = 7000;    // M4 total run duration (7s)
-const unsigned long SEQUENCE_PAUSE      = 500;     // Pause between sequences (0.5s)
 
 // ================ EEPROM CONFIGURATION ====================== //
 const int M1_EEPROM_ADDR_POS       = 0;      // EEPROM storage address
@@ -165,9 +165,6 @@ void testM4();
 // =================== SYSTEM FUNCTIONS ======================= //
 // Initialize all motors and encoders
 void initializeMotors(){
-  // Initialize Shield 1 (M3 & M4)
-  md.init();
-  
   // Initialize M1 control pins
   pinMode(M1_INA, OUTPUT);
   pinMode(M1_INB, OUTPUT);
@@ -175,12 +172,6 @@ void initializeMotors(){
   digitalWrite(M1_INA, LOW);
   digitalWrite(M1_INB, LOW);
   analogWrite(M1_PWM, 0);
-  
-  // Initialize M1 encoder with both interrupt pins
-  pinMode(m1PinA, INPUT_PULLUP);
-  pinMode(m1PinB, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(m1PinA), updateM1Encoder, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(m1PinB), updateM1Encoder, CHANGE);
 
   // Initialize M2 control pins
   pinMode(M2_INA, OUTPUT);
@@ -189,6 +180,20 @@ void initializeMotors(){
   digitalWrite(M2_INA, LOW);
   digitalWrite(M2_INB, LOW);
   analogWrite(M2_PWM, 0);
+
+  delay(200);
+
+  // Initialize Shield 1 (M3 & M4)
+  md.init();
+  md.setM1Speed(0);
+  md.setM2Speed(0);
+  delay(100);
+  
+  // Initialize M1 encoder with both interrupt pins
+  pinMode(m1PinA, INPUT_PULLUP);
+  pinMode(m1PinB, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(m1PinA), updateM1Encoder, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(m1PinB), updateM1Encoder, CHANGE);
   
   // Initialize M2 encoder (pin 22 is not an interrupt pin)
   pinMode(m2PinA, INPUT_PULLUP);
@@ -201,6 +206,16 @@ void initializeMotors(){
   pinMode(m3PinB, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
+
+  // Final verification - ensure all motors stopped
+  digitalWrite(M1_INA, LOW);
+  digitalWrite(M1_INB, LOW);
+  analogWrite(M1_PWM, 0);
+  digitalWrite(M2_INA, LOW);
+  digitalWrite(M2_INB, LOW);
+  analogWrite(M2_PWM, 0);
+  md.setM1Speed(0);
+  md.setM2Speed(0);
 }
 
 // Clear motor faults on startup
@@ -208,6 +223,12 @@ void clearMotorFaults(){
   Serial.println("Clearing motor faults...");
   
   // Stop all shield motors
+  digitalWrite(M1_INA, LOW);
+  digitalWrite(M1_INB, LOW);
+  analogWrite(M1_PWM, 0);
+  digitalWrite(M2_INA, LOW);
+  digitalWrite(M2_INB, LOW);
+  analogWrite(M2_PWM, 0);
   md.setM1Speed(0);
   md.setM2Speed(0);
   delay(100);
@@ -215,12 +236,25 @@ void clearMotorFaults(){
   // Reinitialize motor shield
   md.init();
   delay(500);
+
+  md.setM1Speed(0);
+  md.setM2Speed(0);
+  delay(100);
   
   // Re-attach M3 encoder interrupts
   pinMode(m3PinA, INPUT_PULLUP);
   pinMode(m3PinB, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
+
+  // Verify M1/M2 still stopped (redundant safety)
+  digitalWrite(M1_INA, LOW);
+  digitalWrite(M1_INB, LOW);
+  analogWrite(M1_PWM, 0);
+  digitalWrite(M2_INA, LOW);
+  digitalWrite(M2_INB, LOW);
+  analogWrite(M2_PWM, 0);
+  delay(100);
   
   Serial.println("Motor faults cleared");
 }
@@ -244,33 +278,33 @@ bool validateAndFixEEPROM(){
   Serial.println("Validating EEPROM data...");
   bool allValid = true;
   
-  // Check M1 position
+  // Check M1 position (valid range: -50,000 to +50,000)
   long savedM1Pos;
   EEPROM.get(M1_EEPROM_ADDR_POS, savedM1Pos);
   Serial.print("M1 EEPROM value: ");
   Serial.println(savedM1Pos);
   
-  if (savedM1Pos < -500 || savedM1Pos > 500){
+  if (savedM1Pos < -50000 || savedM1Pos > 50000){
     Serial.println("WARNING: M1 EEPROM corrupted - resetting to 0");
     long zeroValue = 0;
     EEPROM.put(M1_EEPROM_ADDR_POS, zeroValue);
     allValid = false;
   }
   
-  // Check M2 position
+  // Check M2 position (valid range: -85,000 to +85,000)
   long savedM2Pos;
   EEPROM.get(M2_EEPROM_ADDR_POS, savedM2Pos);
   Serial.print("M2 EEPROM value: ");
   Serial.println(savedM2Pos);
   
-  if (savedM2Pos < -500 || savedM2Pos > 500){
+  if (savedM2Pos < -85000 || savedM2Pos > 85000){
     Serial.println("WARNING: M2 EEPROM corrupted - resetting to 0");
     long zeroValue = 0;
     EEPROM.put(M2_EEPROM_ADDR_POS, zeroValue);
     allValid = false;
   }
   
-  // Check M3 position
+  // Check M3 position (same as before)
   long savedM3Pos;
   EEPROM.get(M3_EEPROM_ADDR_POS, savedM3Pos);
   Serial.print("M3 EEPROM value: ");
@@ -341,7 +375,7 @@ bool allMotorsToSafePos(){
   
   const long M1_HOME_POSITION = 0;  // Fully retracted
   
-  if (!moveM1ToPosition(M1_HOME_POSITION, 10000)){
+  if (!moveM1ToPosition(M1_HOME_POSITION, M1_TIMEOUT)){
     Serial.println("M1: Failed to reach safe position!");
     allSuccess = false;
   } else {
@@ -358,7 +392,7 @@ bool allMotorsToSafePos(){
   
   const long M2_HOME_POSITION = 0;  // Fully raised
   
-  if (!moveM2ToPosition(M2_HOME_POSITION, 10000)){
+  if (!moveM2ToPosition(M2_HOME_POSITION, M2_TIMEOUT)){
     Serial.println("M2: Failed to reach safe position!");
     allSuccess = false;
   } else {
@@ -383,6 +417,7 @@ bool allMotorsToSafePos(){
       allSuccess = false;
       break;
     }
+
     if (checkMotorFaults()){
       allSuccess = false;
       break;
@@ -403,9 +438,16 @@ bool allMotorsToSafePos(){
   }
 
   brakeM3();
-  m3Position = SAFE_POS_COUNTS;
-  savedM3EncoderPos();
-  Serial.println("M3: Safe");
+
+  // Only set position if we actually reached target
+  if (abs(getM3Position() - SAFE_POS_COUNTS) <= M3_POSITION_TOLERANCE){
+    m3Position = SAFE_POS_COUNTS;
+    savedM3EncoderPos();
+    Serial.println("M3: Safe");
+  } else {
+    Serial.println("M3: WARNING - Not at safe position!");
+    savedM3EncoderPos();  // Save actual position, not ideal position
+  }
   
   // M4 - Belt: Stop in place
   Serial.println("M4: Stopping belt");
@@ -573,6 +615,7 @@ bool runM1Sequence(){
   
   long lastPosition = 0;
   unsigned long lastMovementTime = millis();
+  unsigned long lastPrintTime = millis();
   const unsigned long STALL_TIMEOUT = 200;
   const long MIN_MOVEMENT = 2;
   const long MAX_EXTENSION_LIMIT = M1_EXTEND_COUNTS; // Safety limit
@@ -580,7 +623,7 @@ bool runM1Sequence(){
   unsigned long startTime = millis();
   while (true){
     // Check for overall timeout (safety caution)
-    if (millis() - startTime > 10000){
+    if (millis() - startTime > M1_TIMEOUT){
       Serial.println("ERROR: M1 extend timeout!");
       setM1Direction(0);
       analogWrite(M2_PWM, 0);
@@ -609,6 +652,13 @@ bool runM1Sequence(){
       Serial.println(currentPosition);
       break;
     }
+
+    // Print progress every 5 seconds
+    if (millis() - lastPrintTime > 5000){
+      Serial.print("M1 extending... Position: ");
+      Serial.println(getM1Position());
+      lastPrintTime = millis();
+    }
     
     delay(10);
   }
@@ -630,8 +680,8 @@ bool runM1Sequence(){
     lastMovementTime = millis();
     startTime = millis();
 
-    while (abs(getM1Position()) > 10){  // Retract to ~0 (with some tolerance)
-      if (millis() - startTime > 10000){
+    while (abs(getM1Position()) > M1_POSITION_TOLERANCE){  // Retract to ~0 (with some tolerance)
+      if (millis() - startTime > M1_TIMEOUT){
         Serial.println("ERROR: M1 retract timeout!");
         setM1Direction(0);
         analogWrite(M2_PWM, 0);
@@ -671,11 +721,32 @@ bool moveM1ToPosition(long targetPosition, unsigned long timeout){
   Serial.println(targetPosition);
 
   unsigned long startTime = millis();
+  long lastPosition = getM1Position();
+  unsigned long lastMovementTime = millis();
+  const unsigned long STALL_TIMEOUT = 500;  // 500ms no movement = stalled
+  const long MIN_MOVEMENT = 5;  // Minimum movement to reset stall timer
 
   while (abs(getM1Position() - targetPosition) > M1_POSITION_TOLERANCE){
     // Checks for timeout
     if (millis() - startTime > timeout){
       Serial.println("ERROR: M1 position timeout!");
+      setM1Direction(0);
+      return false;
+    }
+
+    long currentPosition = getM1Position();
+
+    // Check if motor is moving
+    if (abs(currentPosition - lastPosition) > MIN_MOVEMENT){
+      lastPosition = currentPosition;
+      lastMovementTime = millis();
+    }
+
+    // Stall detection
+    if (millis() - lastMovementTime > STALL_TIMEOUT){
+      Serial.println("ERROR: M1 stalled during homing!");
+      Serial.print("Stuck at position: ");
+      Serial.println(currentPosition);
       setM1Direction(0);
       return false;
     }
@@ -704,7 +775,7 @@ bool moveM1ToPosition(long targetPosition, unsigned long timeout){
 
 // Test M1 motor - Full rotation forward and reverse
 void testM1(){
-  Serial.println("Testing M1 - Full Rotation Test");
+  Serial.println("Testing M1 - Rotation Test");
   Serial.println("=================================");
   m1Position = 0;
   
@@ -713,7 +784,7 @@ void testM1(){
   setM1Direction(1);
   
   unsigned long startTime = millis();
-  while (abs(getM1Position()) < countsPerRev * 10){
+  while (abs(getM1Position()) < countsPerRev){
     if (millis() % 500 == 0) {  // Print every 500ms
       Serial.print("  M1 Count: ");
       Serial.println(getM1Position());
@@ -728,24 +799,24 @@ void testM1(){
   
   delay(1000);  // Pause between directions
   
-  // // REVERSE: Full rotation back
-  // Serial.println("REVERSE: One full rotation...");
-  // m1Position = 0;  // Reset counter
-  // setM1Direction(-1);
+  // REVERSE: Full rotation back
+  Serial.println("REVERSE: One full rotation...");
+  m1Position = 0;  // Reset counter
+  setM1Direction(-1);
   
-  // startTime = millis();
-  // while (abs(getM1Position()) < countsPerRev * 3){
-  //   if (millis() % 500 == 0){  // Print every 500ms
-  //     Serial.print("  M1 Count: ");
-  //     Serial.println(getM1Position());
-  //   }
-  //   delay(10);
-  // }
+  startTime = millis();
+  while (abs(getM1Position()) < countsPerRev){
+    if (millis() % 500 == 0){  // Print every 500ms
+      Serial.print("  M1 Count: ");
+      Serial.println(getM1Position());
+    }
+    delay(10);
+  }
   
-  // setM1Direction(0);
-  // Serial.print("Reverse complete. Final count: ");
-  // Serial.println(getM1Position());
-  // Serial.println("");
+  setM1Direction(0);
+  Serial.print("Reverse complete. Final count: ");
+  Serial.println(getM1Position());
+  Serial.println("");
   Serial.println("=== M1 TEST COMPLETE ===");
 }
 
@@ -841,7 +912,7 @@ bool runM2Sequence(){
 
   unsigned long startTime = millis();
   while (abs(getM2Position()) < m2HalfwayPoint){
-    if (millis() - startTime > 10000){
+    if (millis() - startTime > M2_TIMEOUT / 2){
       Serial.println("ERROR: M2 halfway timeout!");
       setM2Direction(0);
       return false;
@@ -861,6 +932,12 @@ bool runM2Sequence(){
   // STEP 2: Start M4 belt at halfway point
   Serial.println("M2: Reached halfway - Starting M4 belt");
   
+  // CRITICAL: Lock M3 before starting M4
+  Serial.println("Locking M3 conveyor...");
+  md.setM2Speed(0);
+  md.setM2Brake(400);
+  delay(200);
+
   // Always clear faults before M4
   Serial.println("Clearing faults before M4...");
   md.setM1Speed(0);
@@ -874,6 +951,10 @@ bool runM2Sequence(){
   attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
   delay(500);
+
+  Serial.println("Re-locking M3 after init...");
+  md.setM2Brake(400);
+  delay(200);
   
   runM4Cont(m4Speed);
   unsigned long m4StartTime = millis();
@@ -883,7 +964,7 @@ bool runM2Sequence(){
   
   startTime = millis();
   while (abs(getM2Position()) < M2_LOWER_COUNTS){
-    if (millis() - startTime > 10000){
+    if (millis() - startTime > M2_TIMEOUT / 2){
       Serial.println("ERROR: M2 full lower timeout!");
       setM2Direction(0);
       stopMotor(4);
@@ -917,8 +998,8 @@ bool runM2Sequence(){
   startTime = millis();
   unsigned long lastPrintTime = 0;
   
-  while (abs(getM2Position()) > 5){  // Allow 5-count tolerance
-    if (millis() - startTime > 10000){
+  while (abs(getM2Position()) > M2_POSITION_TOLERANCE){  // Allow tolerance
+    if (millis() - startTime > M2_TIMEOUT){
       Serial.println("ERROR: M2 raise timeout!");
       setM2Direction(0);
       stopMotor(4);
@@ -948,6 +1029,8 @@ bool runM2Sequence(){
   // STEP 7: Stop M4
   Serial.println("M4: Stopping");
   stopMotor(4);
+
+  md.setM2Brake(400);
   
   Serial.println("=== M2 PLATFORM SEQUENCE COMPLETE ===");
   return true;
@@ -959,11 +1042,31 @@ bool moveM2ToPosition(long targetPosition, unsigned long timeout){
   Serial.println(targetPosition);
 
   unsigned long startTime = millis();
+  long lastPosition = getM2Position();
+  unsigned long lastMovementTime = millis();
+  const unsigned long STALL_TIMEOUT = 500;
+  const long MIN_MOVEMENT = 5;
 
   while (abs(getM2Position() - targetPosition) > M2_POSITION_TOLERANCE){
     // Checks for timeout
     if (millis() - startTime > timeout){
       Serial.println("ERROR: M2 position timeout!");
+      setM2Direction(0);
+      return false;
+    }
+
+    long currentPosition = getM2Position();
+
+    // Stall detection
+    if (abs(currentPosition - lastPosition) > MIN_MOVEMENT){
+      lastPosition = currentPosition;
+      lastMovementTime = millis();
+    }
+
+    if (millis() - lastMovementTime > STALL_TIMEOUT){
+      Serial.println("ERROR: M2 stalled during homing!");
+      Serial.print("Stuck at position: ");
+      Serial.println(currentPosition);
       setM2Direction(0);
       return false;
     }
@@ -992,7 +1095,7 @@ bool moveM2ToPosition(long targetPosition, unsigned long timeout){
 
 // Test M2 motor - Full rotation forward and reverse
 void testM2(){
-  Serial.println("Testing M2 - Full Rotation Test");
+  Serial.println("Testing M2 - Rotation Test");
   Serial.println("=================================");
   m2Position = 0;
   
@@ -1001,7 +1104,7 @@ void testM2(){
   setM2Direction(1);
   
   unsigned long startTime = millis();
-  while (abs(getM2Position()) < countsPerRev * 10){
+  while (abs(getM2Position()) < countsPerRev){
     if (millis() % 500 == 0) {  // Print every 500ms
       Serial.print("  M2 Count: ");
       Serial.println(getM2Position());
@@ -1022,7 +1125,7 @@ void testM2(){
   setM2Direction(-1);
   
   startTime = millis();
-  while (abs(getM2Position()) < countsPerRev * 20){
+  while (abs(getM2Position()) < countsPerRev){
     if (millis() % 500 == 0){  // Print every 500ms
       Serial.print("  M2 Count: ");
       Serial.println(getM2Position());
@@ -1248,11 +1351,16 @@ void runM4Cont(int speed){
   Serial.println(speed);
 }
 
-// Test M4 motor - Forward and reverse (USING M2 OUTPUT FOR TESTING)
+// Test M4 motor - Belt forward test
 void testM4(){
-  Serial.println("Testing M4 - Forward/Reverse Test");
+  Serial.println("Testing M4 - Forward Test");
   Serial.println("==================================");
   
+  Serial.println("Applying M3 brake...");
+  md.setM2Speed(0);
+  md.setM2Brake(400);
+  delay(200);
+
   // Always clear faults before testing
   Serial.println("Clearing faults...");
   md.setM1Speed(0);
@@ -1268,6 +1376,10 @@ void testM4(){
   attachInterrupt(digitalPinToInterrupt(m3PinA), updateM3Encoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
   delay(500);
+
+  // Re-Apply Brake
+  md.setM2Brake(400);
+  delay(200);
   
   // FORWARD: 3 seconds
   Serial.println("FORWARD: Running for 3 seconds...");
@@ -1276,6 +1388,9 @@ void testM4(){
   md.setM1Speed(0);
   Serial.println("Forward complete.");
   Serial.println("");
+
+  // Keep M3 brake engaged
+  md.setM2Brake(400);
   
   Serial.println("=== M4 TEST COMPLETE ===");
 }
@@ -1285,7 +1400,23 @@ void setup(){
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("AstroGlass Control System v1.6");
+  Serial.println("AstroGlass Control System v1.6.2");
+
+  // IMMEDIATELY disable ALL motors
+  pinMode(M1_INA, OUTPUT);
+  pinMode(M1_INB, OUTPUT);
+  pinMode(M1_PWM, OUTPUT);
+  digitalWrite(M1_INA, LOW);
+  digitalWrite(M1_INB, LOW);
+  analogWrite(M1_PWM, 0);
+  
+  pinMode(M2_INA, OUTPUT);
+  pinMode(M2_INB, OUTPUT);
+  pinMode(M2_PWM, OUTPUT);
+  digitalWrite(M2_INA, LOW);
+  digitalWrite(M2_INB, LOW);
+  analogWrite(M2_PWM, 0);
+  delay(200);
 
   // Check if system was stopped during operation
   bool emergencyDetected = checkEmergencyStop();
@@ -1301,6 +1432,17 @@ void setup(){
   
   // Clear any latched faults from previous runs
   clearMotorFaults();
+
+  // Verify motors are still stopped (redundant safety)
+  digitalWrite(M1_INA, LOW);
+  digitalWrite(M1_INB, LOW);
+  analogWrite(M1_PWM, 0);
+  digitalWrite(M2_INA, LOW);
+  digitalWrite(M2_INB, LOW);
+  analogWrite(M2_PWM, 0);
+  md.setM1Speed(0);
+  md.setM2Speed(0);
+  delay(100);
   
   // Move all motors to safe positions
   if (!allMotorsToSafePos()){
@@ -1349,7 +1491,7 @@ void loop(){
   Serial.println("========================================");
 
   // Wait for the input
-  while (true) {
+  while (true){
     if (Serial.available() > 0){
       char input = Serial.read();
       clearSerialInput();
@@ -1434,6 +1576,12 @@ void loop(){
 
         printProgressBar(0, 1, "Starting M4");
 
+        // Brake M3
+        Serial.println("Locking M3 conveyor...");
+        md.setM2Speed(0);
+        md.setM2Brake(400);
+        delay(200);
+
         // Clear faults before M4
         Serial.println("Clearing faults before M4...");
         md.setM1Speed(0);
@@ -1448,9 +1596,15 @@ void loop(){
         attachInterrupt(digitalPinToInterrupt(m3PinB), updateM3Encoder, CHANGE);
         delay(500);
 
+        // RE-APPLY M3 BRAKE after reinit
+        md.setM2Brake(400);
+        delay(200);
+
         runM4Cont(m4Speed);
         delay(M4_TOTAL_RUN_TIME);
         md.setM1Speed(0);
+
+        md.setM2Brake(400);
 
         printProgressBar(1, 1, "M4 Complete");
         Serial.println("M4 Belt Complete");
@@ -1524,7 +1678,7 @@ void loop(){
         Serial.println("Waiting for test number (1-4)...");
 
         unsigned long testWaitStart = millis();
-        while (millis() - testWaitStart < 5000){  // 5 second timeout
+        while (millis() - testWaitStart < 10000){  // 10 second timeout
           if (Serial.available() > 0){
             char testNum = Serial.read();
             clearSerialInput();
@@ -1557,7 +1711,7 @@ void loop(){
           delay(10);
         }
 
-        if (millis() - testWaitStart >= 5000){
+        if (millis() - testWaitStart >= 10000){
           Serial.println("Test command timeout. Please try again.");
         }
         break;
