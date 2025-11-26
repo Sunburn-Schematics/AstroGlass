@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.6.8
+// VERSION:   v1.6.82
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -1426,7 +1426,7 @@ void setup(){
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("AstroGlass Control System v1.6.8");
+  Serial.println("AstroGlass Control System v1.6.82");
 
   // Check if system was stopped during operation
   bool emergencyDetected = checkEmergencyStop();
@@ -1484,6 +1484,7 @@ void loop(){
   Serial.println("  [3] - M3 Lower to 90°");
   Serial.println("  [4] - M3 Raise up 90°");
   Serial.println("  [5] - M4 Belt Run");
+  Serial.println("  [6] - M1 and M2 Sequence");
   Serial.println("");
   Serial.println("Position Controls Keys:");
   Serial.println("  [H] - Home All Motors");
@@ -1633,6 +1634,43 @@ void loop(){
 
         printProgressBar(1, 1, "M4 Complete");
         Serial.println("M4 Belt Complete");
+        setSystemState(SYSTEM_SAFE);
+        break;
+
+      } else if (input == '6'){
+        Serial.println("");
+        Serial.println(">>> RUNNING M1 AND M2 SEQUENCE <<<");
+        setSystemState(SYSTEM_RUNNING);
+
+        // STEP 1: Run M1 Plunger
+        printProgressBar(0, 2, "Starting M1");
+
+        if (runM1Sequence()){
+          printProgressBar(1, 2, "M1 Complete");
+          Serial.println("M1 Sequence Complete");
+        } else {
+          Serial.println("M1 Sequence failed - Aborting");
+          setSystemState(SYSTEM_SAFE);
+          break;
+        }
+
+        // 1 second delay
+        delay(1000);
+
+        // STEP 2: Run M2 Platform
+        printProgressBar(1, 2, "Starting M2");
+
+        if (runM2Sequence()){
+          printProgressBar(2, 2, "M2 Complete");
+          Serial.println("M2 Sequence Complete");
+        } else {
+          Serial.println("M2 Sequence Failed");
+          setSystemState(SYSTEM_SAFE);
+          break;
+        }
+
+        Serial.println("");
+        Serial.println("=== M1 + M2 SEQUENCE COMPLETE===");
         setSystemState(SYSTEM_SAFE);
         break;
 
