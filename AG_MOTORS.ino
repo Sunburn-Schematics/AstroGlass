@@ -4,7 +4,7 @@
 // DRIVER:    x2 DualVNH5019 Motor Shield
 // MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.6.82
+// VERSION:   v1.6.9
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -1025,6 +1025,7 @@ bool runM2Sequence(){
   }
   
   setM2Direction(0);
+  m2Position = 0;
   savedM2EncoderPos();
   Serial.println("M2: Back at start position");
 
@@ -1426,7 +1427,7 @@ void setup(){
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("AstroGlass Control System v1.6.82");
+  Serial.println("AstroGlass Control System v1.6.9");
 
   // Check if system was stopped during operation
   bool emergencyDetected = checkEmergencyStop();
