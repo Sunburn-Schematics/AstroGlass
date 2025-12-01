@@ -2,9 +2,10 @@
 // PROJECT:   AstroGlass, The Middle Man, Control System
 // PLATFORM:  Arduino MEGA 2560
 // DRIVER:    x2 DualVNH5019 Motor Shield
-// MOTOR:     x4 Maverick 12V DC Gear Motor w/Encoder (61:1)
+// MOTOR:     x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
+//            x1 Maverick Planetary DC Gear Motor w/Encoder (37:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   v1.6.9
+// VERSION:   v1.7.0
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -35,10 +36,10 @@
 */
 
 // ======================== MOTOR SPEEDS ====================== //
-const int m1Speed = 128;     // PWM speed (0-255)
-const int m2Speed = 200;     // PWM speed (0-255)
+const int m1Speed = 32;     // PWM speed (0-255)
+const int m2Speed = 225;    // PWM speed (0-255)
 const int m3Speed = 100;    // Shield speed (-400-400)
-const int m4Speed = 100;    // Shield speed (-400-400)
+const int m4Speed = -100;    // Shield speed (-400-400)
 
 // ==================== SHIELD 2 CONTROL PINS ================= //
 // M1 Plunger Motor
@@ -73,7 +74,7 @@ volatile int m3PrevB = LOW;
 // ============== MOTOR-SPECIFIC PARAMETERS =================== //
 // M1 Plunger Parameters
 const int M1_POSITION_TOLERANCE = 50;        // Acceptable position error (counts)
-const long M1_EXTEND_COUNTS     = 42700;     // Extension distance: 50 rotations
+const long M1_EXTEND_COUNTS     = 2000;     // Extension distance: 50 rotations
 const long M1_HOLD_TIME         = 1000;      // Compression hold time (milliseconds)
 
 // M2 Platform Parameters
@@ -83,13 +84,14 @@ const long M2_LOWER_COUNTS      = 78568;     // Lowering distance: 92 rotations
 // M3 Conveyor Parameters
 const int M3_POSITION_TOLERANCE = 10;        // Acceptable position error (counts)
 const long SAFE_POS_COUNTS      = 0;         // Home/safe position
-const long CONST_90_DEG         = 600;       // 90-degree movement (1/4 revolution)
+const long CONST_90_DEG         = 400;       // 90-degree movement (1/4 revolution)
 const long M3_MAX_VALID_POS     = 500;       // Maximum valid EEPROM position
 const long M3_MIN_VALID_POS     = -500;      // Minimum valid EEPROM position
 const int SAFE_SPEED            = 150;       // Speed for returning to safe position
 
 // Extra Parameters
-const long countsPerRev = 854;          // Maverick: 7 PPR × 2 edges × 61:1 gear
+const long countsPerRev   = 854;          // Maverick: 7 PPR × 2 edges × 61:1 gear
+const long m1CountsPerRev = 230;           // Planetary: 7 PPR × 2 edges × 3.7:1 gear
 
 // ===================== TIMING PARAMETERS ==================== //
 const unsigned long MOTOR_TIMEOUT_MOVE  = 15000;   // M3 movement timeout (15s)
@@ -101,8 +103,8 @@ const unsigned long M4_TOTAL_RUN_TIME   = 3000;    // M4 total run duration (7s)
 // ================ EEPROM CONFIGURATION ====================== //
 const int M1_EEPROM_ADDR_POS       = 0;      // EEPROM storage address
 const int M2_EEPROM_ADDR_POS       = 8;      // EEPROM storage address
-const int M3_EEPROM_ADDR_POS       = 16;      // EEPROM storage address
-const int EEPROM_SYSTEM_STATE_ADDR = 24;      // System state flag address
+const int M3_EEPROM_ADDR_POS       = 16;     // EEPROM storage address
+const int EEPROM_SYSTEM_STATE_ADDR = 24;     // System state flag address
 const byte SYSTEM_RUNNING          = 0xAA;   // Magic byte: system active
 const byte SYSTEM_SAFE             = 0x55;   // Magic byte: system safe
 
@@ -609,27 +611,19 @@ bool runM1Sequence(){
   analogWrite(M2_PWM, 255);
   delay(100);
   
-  // STEP 1: Extend plunger
-  Serial.println("Extending plunger until resistance...");
+  // STEP 1: Extend plunger with resistance detection
+  Serial.println("Extending plunger to target position...");
   setM1Direction(1);
   
+  unsigned long lastPrintTime = millis();
+  unsigned long startTime = millis();
   long lastPosition = 0;
   unsigned long lastMovementTime = millis();
-  unsigned long lastPrintTime = millis();
-  unsigned long lastSpeedCheckTime = millis();
-  long lastSpeedCheckPosition = 0;
-  
-  const unsigned long STALL_TIMEOUT = 500;
-  const long MIN_MOVEMENT = 20;
-  const long MAX_EXTENSION_LIMIT = M1_EXTEND_COUNTS;
-  
-  // NEW: Speed-based detection
-  const unsigned long SPEED_CHECK_INTERVAL = 250;  // Check speed every 250ms
-  const long MIN_SPEED = 50;  // Must move at least 50 counts per 250ms
+  const unsigned long RESISTANCE_TIMEOUT = 500;  // 500ms no movement = hit resistance
+  const long MIN_MOVEMENT_EXTEND = 50;  // Minimum counts to consider "moving" during extension
 
-  unsigned long startTime = millis();
   while (true){
-    // Check for overall timeout (safety caution)
+    // Check for overall timeout (safety)
     if (millis() - startTime > M1_TIMEOUT){
       Serial.println("ERROR: M1 extend timeout!");
       setM1Direction(0);
@@ -639,107 +633,92 @@ bool runM1Sequence(){
 
     long currentPosition = getM1Position();
 
-    if (abs(currentPosition) >= MAX_EXTENSION_LIMIT){
-      Serial.println("MAXIMUM Extension limit reached");
-      Serial.print("Position at limit: ");
+    // Stop when reaching target extension (safety limit)
+    if (abs(currentPosition) >= M1_EXTEND_COUNTS){
+      Serial.println("Extension complete - reached limit");
+      Serial.print("Position: ");
       Serial.println(currentPosition);
       break;
     }
 
-    // Check if motor is still moving (original check)
-    if (abs(currentPosition - lastPosition) > MIN_MOVEMENT){
+    // Check if motor is still moving
+    if (abs(currentPosition - lastPosition) > MIN_MOVEMENT_EXTEND){
       lastPosition = currentPosition;
       lastMovementTime = millis();
     }
 
-    // If no movement for STALL_TIMEOUT, we got resistance
-    if (millis() - lastMovementTime > STALL_TIMEOUT){
-      Serial.println("Resistance detected - Plunger stalled (no movement)");
-      Serial.print("Position at stall: ");
+    // RESISTANCE DETECTION: If motor hasn't moved in 500ms, assume hit glass
+    if (millis() - lastMovementTime > RESISTANCE_TIMEOUT){
+      Serial.println("Resistance detected - glass compressed");
+      Serial.print("Position: ");
       Serial.println(currentPosition);
-      break;
-    }
-
-    // NEW: Speed-based resistance detection
-    if (millis() - lastSpeedCheckTime > SPEED_CHECK_INTERVAL){
-      long movementSinceLastCheck = abs(currentPosition - lastSpeedCheckPosition);
-      
-      if (movementSinceLastCheck < MIN_SPEED){
-        Serial.println("Resistance detected - Plunger moving too slowly");
-        Serial.print("Speed: ");
-        Serial.print(movementSinceLastCheck);
-        Serial.print(" counts per ");
-        Serial.print(SPEED_CHECK_INTERVAL);
-        Serial.println("ms");
-        Serial.print("Position at resistance: ");
-        Serial.println(currentPosition);
-        break;
-      }
-      
-      lastSpeedCheckPosition = currentPosition;
-      lastSpeedCheckTime = millis();
+      break;  // Stop extending, go to hold phase
     }
 
     // Print progress every 5 seconds
     if (millis() - lastPrintTime > 5000){
       Serial.print("M1 extending... Position: ");
-      Serial.println(getM1Position());
+      Serial.println(currentPosition);
       lastPrintTime = millis();
     }
     
     delay(10);
   }
-    // Step 2: Hold compression with force
-    Serial.print("Compressing for ");
-    Serial.print(M1_HOLD_TIME / 1000);
-    Serial.println(" seconds...");
-    // Motor stays powered, applying force
-    delay(M1_HOLD_TIME);
+  
+  // STEP 2: Hold compression with force
+  Serial.print("Compressing for ");
+  Serial.print(M1_HOLD_TIME / 1000);
+  Serial.println(" seconds...");
+  delay(M1_HOLD_TIME);
 
-    setM1Direction(0);
-    Serial.println("Compression Complete.");
+  setM1Direction(0);
+  Serial.println("Compression Complete.");
 
-    // Step 3: Retract plunger to start position
-    Serial.println("Retracting plunger...");
-    setM1Direction(-1);
+  // STEP 3: Retract plunger to start position
+  Serial.println("Retracting plunger...");
+  setM1Direction(-1);
 
-    lastPosition = getM1Position();
-    lastMovementTime = millis();
-    startTime = millis();
+  // Re-initialize variables for retraction phase
+  lastPosition = getM1Position();
+  lastMovementTime = millis();
+  const unsigned long STALL_TIMEOUT = 500;
+  const long MIN_MOVEMENT_RETRACT = 20;  // Different sensitivity for retraction
+  startTime = millis();
 
-    while (abs(getM1Position()) > M1_POSITION_TOLERANCE){  // Retract to ~0 (with some tolerance)
-      if (millis() - startTime > M1_TIMEOUT){
-        Serial.println("ERROR: M1 retract timeout!");
-        setM1Direction(0);
-        analogWrite(M2_PWM, 0);
-        return false;
-      }
+  while (abs(getM1Position()) > M1_POSITION_TOLERANCE){
+    if (millis() - startTime > M1_TIMEOUT){
+      Serial.println("ERROR: M1 retract timeout!");
+      setM1Direction(0);
+      analogWrite(M2_PWM, 0);
+      return false;
+    }
 
-      long currentPosition = getM1Position();
+    long currentPosition = getM1Position();
 
-      if (abs(currentPosition - lastPosition) > MIN_MOVEMENT){
-        lastPosition = currentPosition;
-        lastMovementTime = millis();
-      }
+    if (abs(currentPosition - lastPosition) > MIN_MOVEMENT_RETRACT){
+      lastPosition = currentPosition;
+      lastMovementTime = millis();
+    }
 
-      // Stall detection during retraction
-      if (millis() - lastMovementTime > STALL_TIMEOUT){
-        Serial.println("WARNING: M1 stalled during retraction!");
-        Serial.print("Stuck at position: ");
-        Serial.println(currentPosition);
-        setM1Direction(0);
-        return false;
-      }
-      
-      delay(10);
+    // Stall detection during retraction (important safety)
+    if (millis() - lastMovementTime > STALL_TIMEOUT){
+      Serial.println("WARNING: M1 stalled during retraction!");
+      Serial.print("Stuck at position: ");
+      Serial.println(currentPosition);
+      setM1Direction(0);
+      analogWrite(M2_PWM, 0);
+      return false;
     }
     
-    setM1Direction(0);
-    analogWrite(M2_PWM, 0);
+    delay(10);
+  }
+  
+  setM1Direction(0);
+  analogWrite(M2_PWM, 0);
 
-    savedM1EncoderPos();
-    Serial.println("=== M1 SEQUENCE COMPLETE ===");
-    return true;
+  savedM1EncoderPos();
+  Serial.println("=== M1 SEQUENCE COMPLETE ===");
+  return true;
 }
 
 // Moving m1 to the target location with a closed loop controller
@@ -807,11 +786,11 @@ void testM1(){
   m1Position = 0;
   
   // FORWARD: Full rotation
-  Serial.println("FORWARD: One full rotation...");
-  setM1Direction(1);
+  Serial.println("EXTEND: One full rotation...");
+  setM1Direction(-1);
   
   unsigned long startTime = millis();
-  while (abs(getM1Position()) < countsPerRev){
+  while (abs(getM1Position()) < m1CountsPerRev){
     if (millis() % 500 == 0) {  // Print every 500ms
       Serial.print("  M1 Count: ");
       Serial.println(getM1Position());
@@ -820,19 +799,19 @@ void testM1(){
   }
   
   setM1Direction(0);
-  Serial.print("Forward complete. Final count: ");
+  Serial.print("Extension complete. Final count: ");
   Serial.println(getM1Position());
   Serial.println("");
   
   delay(1000);  // Pause between directions
   
   // REVERSE: Full rotation back
-  Serial.println("REVERSE: One full rotation...");
+  Serial.println("RETRACT: One full rotation...");
   m1Position = 0;  // Reset counter
   setM1Direction(-1);
   
   startTime = millis();
-  while (abs(getM1Position()) < countsPerRev){
+  while (abs(getM1Position()) < m1CountsPerRev){
     if (millis() % 500 == 0){  // Print every 500ms
       Serial.print("  M1 Count: ");
       Serial.println(getM1Position());
@@ -841,7 +820,7 @@ void testM1(){
   }
   
   setM1Direction(0);
-  Serial.print("Reverse complete. Final count: ");
+  Serial.print("Retraction complete. Final count: ");
   Serial.println(getM1Position());
   Serial.println("");
   Serial.println("=== M1 TEST COMPLETE ===");
@@ -989,7 +968,7 @@ bool runM2Sequence(){
   
   // Start M4
   Serial.println("Starting M4...");
-  md.setM1Speed(-100);  // Forward direction
+  md.setM1Speed(-m4Speed);  // Forward direction
   delay(200);
 
   // Diagnostic check
@@ -999,9 +978,9 @@ bool runM2Sequence(){
     Serial.println("M4 running successfully");
   }
   
-  // STEP 3: Run M4 for 2 seconds
-  Serial.println("M4: Running for 2 seconds...");
-  delay(5000);
+  // STEP 3: Run M4 for 3 seconds
+  Serial.println("M4: Running for 3 seconds...");
+  delay(3000);
   
   // STEP 4: Stop M4
   Serial.println("M4: Stopping");
@@ -1261,9 +1240,9 @@ bool moveM3ToPosition(long targetCount, unsigned long timeout){
       md.setM2Speed(0);
       break;
     } else if (error > 0){
-      md.setM2Speed(adjustedSpeed);
-    } else {
       md.setM2Speed(-adjustedSpeed);
+    } else {
+      md.setM2Speed(adjustedSpeed);
     }
     
     delay(10);
@@ -1350,51 +1329,32 @@ void runM4Cont(int speed){
   Serial.println(speed);
 }
 
-// Test M4 motor - Minimal test with NO brake, NO init
+// Test M4 motor - Simple run test
 void testM4(){
-  Serial.println("Testing M4 - MINIMAL TEST");
+  Serial.println("Testing M4 - Belt Motor");
   Serial.println("==================================");
   
-  // NO M3 brake - leave it free
+  // Release M3 (don't brake it during test)
   Serial.println("Releasing M3...");
   md.setM2Speed(0);
   delay(500);
   
-  // Check for fault BEFORE trying to run M4
-  Serial.print("M4 fault status before start: ");
+  // Check fault status before starting
+  Serial.print("M4 fault status: ");
   Serial.println(md.getM1Fault());
   
-  // Try M4 at different speeds
-  Serial.println("Trying M4 at speed 100...");
-  md.setM1Speed(100);
-  delay(2000);
-  Serial.print("M4 fault during run: ");
-  Serial.println(md.getM1Fault());
-  md.setM1Speed(0);
-  delay(1000);
+  // Run M4 forward for 3 seconds
+  Serial.println("Running M4 forward...");
+  md.setM1Speed(m4Speed);
+  delay(3000);
   
-  Serial.println("Trying M4 at speed -100...");
-  md.setM1Speed(-100);
-  delay(2000);
-  Serial.print("M4 fault during run: ");
-  Serial.println(md.getM1Fault());
+  // Stop M4
   md.setM1Speed(0);
-  delay(1000);
+  Serial.println("M4 stopped");
   
-  Serial.println("Trying M4 at speed 300...");
-  md.setM1Speed(300);
-  delay(2000);
-  Serial.print("M4 fault during run: ");
+  // Check fault status after test
+  Serial.print("M4 fault status: ");
   Serial.println(md.getM1Fault());
-  md.setM1Speed(0);
-  delay(1000);
-  
-  Serial.println("Trying M4 at speed -300...");
-  md.setM1Speed(-300);
-  delay(2000);
-  Serial.print("M4 fault during run: ");
-  Serial.println(md.getM1Fault());
-  md.setM1Speed(0);
   
   Serial.println("=== M4 TEST COMPLETE ===");
 }
@@ -1427,7 +1387,7 @@ void setup(){
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("AstroGlass Control System v1.6.9");
+  Serial.println("AstroGlass Control System v1.7.0");
 
   // Check if system was stopped during operation
   bool emergencyDetected = checkEmergencyStop();
@@ -1583,7 +1543,7 @@ void loop(){
       } else if (input == '5'){
         // M4 Belt Run
         Serial.println("");
-        Serial.println(">>> RUNNING M4 BELT FOR 7 SECONDS <<<");
+        Serial.println(">>> RUNNING M4 BELT FOR 3 SECONDS <<<");
         setSystemState(SYSTEM_RUNNING);
 
         printProgressBar(0, 1, "Starting M4");
@@ -1616,7 +1576,7 @@ void loop(){
 
         // Start M4 with REVERSED direction and HIGH speed
         Serial.println("Starting M4...");
-        md.setM1Speed(50);
+        md.setM1Speed(m4Speed);
         delay(200);
 
         // Diagnostic check
@@ -1803,4 +1763,13 @@ void loop(){
 
   delay(500);
 }
+
+
+
+
+
+
+
+
+
 
