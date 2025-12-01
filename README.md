@@ -1,9 +1,9 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** v1.7.0
+**Version:** 2.0.0
 
-**Last Update:** 11/30/25 at 8:06p
+**Last Update:** 12/01/25 at 4:00p
 
 ---
 
@@ -27,7 +27,8 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 ## HARDWARE USED
 - Arduino **Mega 2560**  
 - **(x2)** Dual VNH5019 Motor Shield  
-- **(x4)** Maverick **12V DC** Gear Motors w/ Encoders  
+- **(x3)** Maverick **12V DC** Gear Motors w/ Encoders (61:1)
+- **(x1)** Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 - Emergency-Stop Button  
 - Supporting power + wiring hardware  
 
@@ -35,8 +36,9 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 
 ## FILES
 - **AG_MOTORS.ino** — Full control system
-- **AG_MOTORS.h** — Coming Soon  
-- **AG_MOTORS.cpp** — Coming Soon  
+- **AG_MOTORS.h** — All declared functions and constants
+- **AG_MOTORS.cpp** —  All funnction definitions
+- **README.md**  — What **YOU** are currently reading
 
 ---
 
@@ -56,6 +58,7 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 - **[H]** → Have all motors go to their home position
 - **[R]** → Reset all motor positions to zero
 - **[S]** → Show all current motor positions
+- **[V]** → Version of the code
 - **[?]** → Team Credits 
 
 ---
