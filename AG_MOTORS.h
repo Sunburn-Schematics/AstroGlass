@@ -5,7 +5,7 @@
 // MOTOR(S):  x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
 //            x1 Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   h1.0.1
+// VERSION:   h1.0.2
 // ============================================================= //
 
 #ifndef AG_MOTORS_H

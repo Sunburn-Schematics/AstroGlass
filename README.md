@@ -1,9 +1,9 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** 2.0.1
+**Version:** 2.0.2
 
-**Last Update:** 12/01/25 at 9:18p
+**Last Update:** 12/01/25 at 11:04p
 
 ---
 
@@ -43,7 +43,7 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 ---
 
 ## OPERATING THE SYSTEM
-1. Open the `.ino` file in **Arduino IDE**  
+1. Open the `.ino`, '.h', and '.cpp' file in **Arduino IDE**  
 2. Select **Board:** Arduino Mega 2560  
 3. Select the correct **COM** port  
 4. Upload code  

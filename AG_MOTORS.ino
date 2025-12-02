@@ -411,7 +411,7 @@ void loop(){
         PRINT_PROGMEM("║           ASTROGLASS PROJECT           ║");
         PRINT_PROGMEM("║      Lunar Regolith Glassblowing       ║");
         PRINT_PROGMEM("╠════════════════════════════════════════╣");
-        PRINT_PROGMEM("║            VERSION: 2.0.1              ║");
+        PRINT_PROGMEM("║            VERSION: 2.0.2              ║");
         PRINT_PROGMEM("╚════════════════════════════════════════╝");
         PRINT_PROGMEM("");
         delay(2000);

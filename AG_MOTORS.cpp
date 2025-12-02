@@ -5,7 +5,7 @@
 // MOTOR(S):  x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
 //            x1 Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   c1.0.1
+// VERSION:   c1.0.2
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -1193,6 +1193,8 @@ bool moveM3ToPosition(long targetCount, unsigned long timeout){
       return false;
     }
 
+    if (checkPauseResume()) break;
+
     if (checkMotorFaults()){
       Serial.println("Fault during M3 movement!");
       stopMotor(3);
@@ -1390,7 +1392,7 @@ void printStartUp(){
   PRINT_PROGMEM("║          ║   ║ ╚═══╝ ╚════╝           ║");
   PRINT_PROGMEM("║                                       ║");
   PRINT_PROGMEM("║       ASTROGLASS CONTROL SYSTEM       ║");
-  PRINT_PROGMEM("║             Version 2.0.1             ║");
+  PRINT_PROGMEM("║             Version 2.0.2             ║");
   PRINT_PROGMEM("║                                       ║");
   PRINT_PROGMEM("║   Lunar Regolith Glass Manufacturing  ║");
   PRINT_PROGMEM("╚═══════════════════════════════════════╝");
