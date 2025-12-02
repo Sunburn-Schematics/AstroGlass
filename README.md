@@ -1,9 +1,9 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** 2.0.0
+**Version:** 2.0.1
 
-**Last Update:** 12/01/25 at 4:00p
+**Last Update:** 12/01/25 at 9:18p
 
 ---
 
@@ -35,10 +35,10 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 ---
 
 ## FILES
-- **AG_MOTORS.ino** — Full control system
-- **AG_MOTORS.h** — All declared functions and constants
-- **AG_MOTORS.cpp** —  All funnction definitions
-- **README.md**  — What **YOU** are currently reading
+- **AG_MOTORS.ino** - Full control system
+- **AG_MOTORS.h** - All declared functions and constants
+- **AG_MOTORS.cpp** -  All funnction definitions
+- **README.md** - What **YOU** are currently reading
 
 ---
 
@@ -56,6 +56,7 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 - **[6]** → Run M1 and M2 sequence
 - **[T1]-[T4]** → Test motors, 1–4
 - **[H]** → Have all motors go to their home position
+- **[M]** → Display the speed of motors
 - **[R]** → Reset all motor positions to zero
 - **[S]** → Show all current motor positions
 - **[V]** → Version of the code

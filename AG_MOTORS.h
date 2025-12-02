@@ -5,7 +5,7 @@
 // MOTOR(S):  x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
 //            x1 Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   h1.0
+// VERSION:   h1.0.1
 // ============================================================= //
 
 #ifndef AG_MOTORS_H
@@ -58,7 +58,7 @@ extern const long M1_EXTEND_COUNTS;      // Extension distance: 50 rotations
 extern const long M1_HOLD_TIME;          // Compression hold time (milliseconds)
 
 // M2 Platform Parameters
-extern const int M2_POSITION_TOLERANCE50;  // Acceptable position error (counts)
+extern const int M2_POSITION_TOLERANCE;  // Acceptable position error (counts)
 extern const long M2_LOWER_COUNTS;         // Lowering distance: 92 rotations
 
 // M3 Conveyor Parameters
@@ -96,6 +96,9 @@ extern volatile long m3Position;  // M3 current encoder position
 // ================= MOTOR SHIELD OBJECT ====================== //
 extern DualVNH5019MotorShield md;
 
+// ===================== PAUSE/RESUME ========================= //
+extern volatile bool systemPaused;
+
 // =================== FUNCTION DECLARATIONS ================== //
 // System Functions
 void initializeMotors();
@@ -104,6 +107,7 @@ void clearMotorFaults();
 bool checkEmergencyStop();
 void setSystemState(byte state);
 void clearSerialInput();
+bool checkPauseResume();
 bool allMotorsToSafePos();
 void stopMotor(int motorNum);
 void stopAllMotors();
@@ -149,6 +153,7 @@ void printStartUp();
 void printMainMenu();
 
 #endif
+
 
 
 

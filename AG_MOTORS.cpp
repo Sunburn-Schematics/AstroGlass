@@ -5,7 +5,7 @@
 // MOTOR(S):  x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
 //            x1 Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   c1.0
+// VERSION:   c1.0.1
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -120,6 +120,9 @@ volatile long m3Position = 0;       // M3 current encoder position
 
 // ================= MOTOR SHIELD OBJECT ====================== //
 DualVNH5019MotorShield md;
+
+// ===================== PAUSE/RESUME ========================= //
+volatile bool systemPaused = false;
 
 // ================= FUNCTION DECLARATIONS ==================== //
 // Initialize all motors and encoders
@@ -256,6 +259,35 @@ void clearSerialInput(){
   while (Serial.available() > 0){
     Serial.read();
   }
+}
+
+// Checks if system has been paused
+bool checkPauseResume(){
+  if (Serial.available() > 0){
+    char input = Serial.read();
+    if (input == 'P' || input == 'p'){
+      systemPaused = !systemPaused;
+      if (systemPaused){
+        Serial.println("*** SYSTEM PAUSED - Press 'P' to resume ***");
+        stopAllMotors();
+      } else {
+        Serial.println("*** SYSTEM RESUMED ***");
+      }
+    }
+  }
+  
+  while (systemPaused){
+    if (Serial.available() > 0){
+      char input = Serial.read();
+      if (input == 'P' || input == 'p'){
+        systemPaused = false;
+        Serial.println("*** SYSTEM RESUMED ***");
+        return true;
+      }
+    }
+    delay(100);
+  }
+  return systemPaused;
 }
 
 // Move all motors to safe positions
@@ -560,6 +592,8 @@ bool runM1Sequence(){
   const long MIN_MOVEMENT_EXTEND = 50;  // Minimum counts to consider "moving" during extension
 
   while (true){
+    if (checkPauseResume()) break;
+
     // Check for overall timeout (safety)
     if (millis() - startTime > M1_TIMEOUT){
       Serial.println("ERROR: M1 extend timeout!");
@@ -623,6 +657,8 @@ bool runM1Sequence(){
   startTime = millis();
 
   while (abs(getM1Position()) > M1_POSITION_TOLERANCE){
+    if (checkPauseResume()) break;
+
     if (millis() - startTime > M1_TIMEOUT){
       Serial.println("ERROR: M1 retract timeout!");
       setM1Direction(0);
@@ -853,6 +889,8 @@ bool runM2Sequence(){
 
   unsigned long startTime = millis();
   while (abs(getM2Position()) < M2_LOWER_COUNTS){
+    if (checkPauseResume()) break;
+
     if (millis() - startTime > M2_TIMEOUT){
       Serial.println("ERROR: M2 lower timeout!");
       setM2Direction(0);
@@ -931,6 +969,8 @@ bool runM2Sequence(){
   startTime = millis();
   
   while (abs(getM2Position()) > M2_POSITION_TOLERANCE){  // Allow tolerance
+    if (checkPauseResume()) break;
+
     if (millis() - startTime > M2_TIMEOUT){
       Serial.println("ERROR: M2 raise timeout!");
       setM2Direction(0);
@@ -1350,7 +1390,7 @@ void printStartUp(){
   PRINT_PROGMEM("║          ║   ║ ╚═══╝ ╚════╝           ║");
   PRINT_PROGMEM("║                                       ║");
   PRINT_PROGMEM("║       ASTROGLASS CONTROL SYSTEM       ║");
-  PRINT_PROGMEM("║             Version 2.0.0             ║");
+  PRINT_PROGMEM("║             Version 2.0.1             ║");
   PRINT_PROGMEM("║                                       ║");
   PRINT_PROGMEM("║   Lunar Regolith Glass Manufacturing  ║");
   PRINT_PROGMEM("╚═══════════════════════════════════════╝");
@@ -1379,16 +1419,20 @@ void printMainMenu(){
   PRINT_PROGMEM("└────────────────────────────────────────┘");
   PRINT_PROGMEM("");
   PRINT_PROGMEM("┌───────── TESTING & DIAGNOSTICS ────────┐");
-  PRINT_PROGMEM("│  [S]  Show Current Positions           │");
-  PRINT_PROGMEM("│  [T] Test Motors                       │");
-  PRINT_PROGMEM("│  - [1] Test M1 Motor                   │");
-  PRINT_PROGMEM("│  - [2] Test M2 Motor                   │");
-  PRINT_PROGMEM("│  - [3] Test M3 Motor                   │");
-  PRINT_PROGMEM("│  - [4] Test M4 Motor                   │");
+  PRINT_PROGMEM("│  [M] Show Current Motor Speeds         │");
+  PRINT_PROGMEM("│  [S] Show Current Positions            │");
+  PRINT_PROGMEM("│  [T] Test/Tune Motors                  │");
+  PRINT_PROGMEM("│  - [1] Test/Tune M1 Motor              │");
+  PRINT_PROGMEM("│  - [2] Test/Tune M2 Motor              │");
+  PRINT_PROGMEM("│  - [3] Test/Tune M3 Motor              │");
+  PRINT_PROGMEM("│  - [4] Test/Tune M4 Motor              │");
   PRINT_PROGMEM("│  [V]  Show Code Version                │");
   PRINT_PROGMEM("│  [?]  Team Credits                     │");
   PRINT_PROGMEM("└────────────────────────────────────────┘");
   PRINT_PROGMEM("");
   PRINT_PROGMEM(">> Enter Command: ");
 }
+
+
+
 

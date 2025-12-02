@@ -5,7 +5,7 @@
 // MOTOR(S):  x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
 //            x1 Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   2.0.0
+// VERSION:   2.0.1
 // ============================================================= //
 
 #include "AG_MOTORS.h"
@@ -283,7 +283,21 @@ void loop(){
 
         setSystemState(SYSTEM_SAFE);
         break;
-
+      } else if (input == 'M' || input == 'm'){
+        // Motor Speed Menu
+        Serial.println("");
+        Serial.println("=== MOTOR SPEED ADJUSTMENT ===");
+        Serial.println("Current Speeds:");
+        Serial.println("  M1  (Plunger): "); Serial.println(m1Speed);
+        Serial.println("  M2 (Platform): "); Serial.println(m2Speed);
+        Serial.println("  M3 (Conveyor): "); Serial.println(m3Speed);
+        Serial.println("  M4 (The Belt): "); Serial.println(abs(m4Speed));
+        Serial.println("");
+        Serial.println("NOTE: Speeds are set in AG_MOTORS.cpp");
+        Serial.println("Modify and reupload to change speeds.");
+        delay(3000);
+        break;
+      
       } else if (input == 'R' || input == 'r'){
         // Reset All Positions
         Serial.println("");
@@ -397,7 +411,7 @@ void loop(){
         PRINT_PROGMEM("║           ASTROGLASS PROJECT           ║");
         PRINT_PROGMEM("║      Lunar Regolith Glassblowing       ║");
         PRINT_PROGMEM("╠════════════════════════════════════════╣");
-        PRINT_PROGMEM("║            VERSION: 2.0.0              ║");
+        PRINT_PROGMEM("║            VERSION: 2.0.1              ║");
         PRINT_PROGMEM("╚════════════════════════════════════════╝");
         PRINT_PROGMEM("");
         delay(2000);
