@@ -2,15 +2,12 @@
 
 **Author:** Pedro Ortiz  
 **Version:** 2.0.3
-
-**Last Update:** 12/02/25 at 9:50p
+**Last Update:** 12/03/25 at 12:02p
 
 ---
 
 ## OVERVIEW
 This repository holds the Arduino code used to control the four-motor subsystem of **FRRED - Freeform Robotic Regolith Engineering Device**. The primary file, **AG_MOTORS.ino**, includes all logic for coordinated movements, encoder tracking, emergency-handling, and safe-position homing.
-
-If you're wondering which file is the correct one, it's this one. You're welcome.
 
 ---
 
@@ -59,8 +56,8 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 - **[M]** → Display the speed of motors
 - **[P]** → Pause/Resume during sequence
 - **[R]** → Reset all motor positions to zero
-- **[S]** → Show all current motor positions
-- **[V]** → Version of the code
+- **[S]** → Display all current motor positions
+- **[V]** → Version of code
 - **[?]** → Team Credits 
 
 ---

@@ -42,7 +42,7 @@
 
 // ======================== MOTOR SPEEDS ====================== //
 const int m1Speed  = 45;     // PWM speed (0-255)
-const int m1SpeedR = 100;     // PWM retraction speed (0-255)
+const int m1SpeedR = 100;    // PWM retraction speed (0-255)
 const int m2Speed  = 255;    // PWM speed (0-255)
 const int m3Speed  = 100;    // Shield speed (-400-400)
 const int m4Speed  = -400;   // Shield speed (-400-400)

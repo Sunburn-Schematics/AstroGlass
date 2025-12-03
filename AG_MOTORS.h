@@ -17,7 +17,7 @@
 
 // ======================== MOTOR SPEEDS ====================== //
 extern const int m1Speed;  // PWM speed (0-255)
-extern const int m1SpeedR;
+extern const int m1SpeedR; // PWM retraction speed (0-255)
 extern const int m2Speed;  // PWM speed (0-255)
 extern const int m3Speed;  // Shield speed (-400-400)
 extern const int m4Speed;  // Shield speed (-400-400)
