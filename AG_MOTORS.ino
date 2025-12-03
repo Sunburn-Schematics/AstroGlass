@@ -5,7 +5,7 @@
 // MOTOR(S):  x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
 //            x1 Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   2.0.1
+// VERSION:   2.0.3
 // ============================================================= //
 
 #include "AG_MOTORS.h"
@@ -285,18 +285,32 @@ void loop(){
         break;
       } else if (input == 'M' || input == 'm'){
         // Motor Speed Menu
-        Serial.println("");
-        Serial.println("=== MOTOR SPEED ADJUSTMENT ===");
-        Serial.println("Current Speeds:");
-        Serial.println("  M1  (Plunger): "); Serial.println(m1Speed);
-        Serial.println("  M2 (Platform): "); Serial.println(m2Speed);
-        Serial.println("  M3 (Conveyor): "); Serial.println(m3Speed);
-        Serial.println("  M4 (The Belt): "); Serial.println(abs(m4Speed));
-        Serial.println("");
-        Serial.println("NOTE: Speeds are set in AG_MOTORS.cpp");
-        Serial.println("Modify and reupload to change speeds.");
+        PRINT_PROGMEM("");
+        PRINT_PROGMEM("╔════════════════════════════════════════╗");
+        PRINT_PROGMEM("║         MOTOR SPEED SETTINGS           ║");
+        PRINT_PROGMEM("╠════════════════════════════════════════╣");
+        Serial.print("║  M1 (Plunger):   ");
+        Serial.print(m1Speed);
+        PRINT_PROGMEM_INLINE(" PWM                ║");
+        Serial.println();
+        Serial.print("║  M2 (Platform):  ");
+        Serial.print(m2Speed);
+        PRINT_PROGMEM_INLINE(" PWM               ║");
+        Serial.println();
+        Serial.print("║  M3 (Conveyor):  ");
+        Serial.print(m3Speed);
+        PRINT_PROGMEM_INLINE(" Shield            ║");
+        Serial.println();
+        Serial.print("║  M4 (Belt):      ");
+        Serial.print(abs(m4Speed));
+        PRINT_PROGMEM_INLINE(" Shield            ║");
+        Serial.println();
+        PRINT_PROGMEM("╠════════════════════════════════════════╣");
+        PRINT_PROGMEM("║  NOTE: Speeds set in AG_MOTORS.cpp     ║");
+        PRINT_PROGMEM("║  Modify and reupload to change         ║");
+        PRINT_PROGMEM("╚════════════════════════════════════════╝");
+        PRINT_PROGMEM("");
         delay(3000);
-        break;
       
       } else if (input == 'R' || input == 'r'){
         // Reset All Positions
@@ -321,47 +335,48 @@ void loop(){
       // ========== SYSTEM INFO COMMANDS ========== //
       } else if (input == 'S' || input == 's'){
         // Show Current Positions
-        Serial.println("");
-        Serial.println("╔════════════════════════════════════════╗");
-        Serial.println("║         CURRENT MOTOR POSITIONS        ║");
-        Serial.println("╠════════════════════════════════════════╣");
+        PRINT_PROGMEM("");
+        PRINT_PROGMEM("╔════════════════════════════════════════╗");
+        PRINT_PROGMEM("║         CURRENT MOTOR POSITIONS        ║");
+        PRINT_PROGMEM("╠════════════════════════════════════════╣");
   
-        Serial.print("║ M1 (Plunger):   ");
+        PRINT_PROGMEM_INLINE("║ M1 (Plunger):   ");
         long m1Pos = getM1Position();
         if (m1Pos >= 0) Serial.print(" ");
         Serial.print(m1Pos);
-        Serial.print(" counts");
+        PRINT_PROGMEM_INLINE(" counts");
   
         // Padding
         int m1Digits = String(abs(m1Pos)).length();
         if (m1Pos < 0) m1Digits++;
         for (int i = 0; i < (15 - m1Digits); i++) Serial.print(" ");
-        Serial.println("║");
+        PRINT_PROGMEM("║");
   
-        Serial.print("║ M2 (Platform):  ");
+        PRINT_PROGMEM_INLINE("║ M2 (Platform):  ");
         long m2Pos = getM2Position();
         if (m2Pos >= 0) Serial.print(" ");
         Serial.print(m2Pos);
-        Serial.print(" counts");
+        PRINT_PROGMEM_INLINE(" counts");
   
         int m2Digits = String(abs(m2Pos)).length();
         if (m2Pos < 0) m2Digits++;
         for (int i = 0; i < (15 - m2Digits); i++) Serial.print(" ");
-        Serial.println("║");
+        PRINT_PROGMEM("║");
   
-        Serial.print("║ M3 (Conveyor):  ");
+        PRINT_PROGMEM_INLINE("║ M3 (Conveyor):  ");
         long m3Pos = getM3Position();
         if (m3Pos >= 0) Serial.print(" ");
         Serial.print(m3Pos);
-        Serial.print(" counts");
+        PRINT_PROGMEM_INLINE(" counts");
   
         int m3Digits = String(abs(m3Pos)).length();
         if (m3Pos < 0) m3Digits++;
         for (int i = 0; i < (15 - m3Digits); i++) Serial.print(" ");
-        Serial.println("║");
+        PRINT_PROGMEM("║");
   
-        Serial.println("╚════════════════════════════════════════╝");
-        Serial.println("");
+        PRINT_PROGMEM("╚════════════════════════════════════════╝");
+        PRINT_PROGMEM("");
+        delay(3000);
         break;
 
       } else if (input == 'T' || input == 't'){
@@ -411,10 +426,10 @@ void loop(){
         PRINT_PROGMEM("║           ASTROGLASS PROJECT           ║");
         PRINT_PROGMEM("║      Lunar Regolith Glassblowing       ║");
         PRINT_PROGMEM("╠════════════════════════════════════════╣");
-        PRINT_PROGMEM("║            VERSION: 2.0.2              ║");
+        PRINT_PROGMEM("║            VERSION: 2.0.3              ║");
         PRINT_PROGMEM("╚════════════════════════════════════════╝");
         PRINT_PROGMEM("");
-        delay(2000);
+        delay(3000);
         break;
       
       // ========== CREDITS ========== //
@@ -440,6 +455,7 @@ void loop(){
 
       } else {
         Serial.println("Invalid Command dude, try again.");
+        delay(5000);
         break;
       }
     }
@@ -449,5 +465,7 @@ void loop(){
 
   delay(500);
 }
+
+
 
 

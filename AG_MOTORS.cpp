@@ -5,7 +5,7 @@
 // MOTOR(S):  x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
 //            x1 Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   c1.0.2
+// VERSION:   c1.0.3
 // ============================================================= //
 
 #include <EEPROM.h>
@@ -41,10 +41,11 @@
 #define PRINT_PROGMEM_INLINE(str) Serial.print(F(str))
 
 // ======================== MOTOR SPEEDS ====================== //
-const int m1Speed = 32;     // PWM speed (0-255)
-const int m2Speed = 225;    // PWM speed (0-255)
-const int m3Speed = 100;    // Shield speed (-400-400)
-const int m4Speed = -100;    // Shield speed (-400-400)
+const int m1Speed  = 45;     // PWM speed (0-255)
+const int m1SpeedR = 100;     // PWM retraction speed (0-255)
+const int m2Speed  = 255;    // PWM speed (0-255)
+const int m3Speed  = 100;    // Shield speed (-400-400)
+const int m4Speed  = -400;   // Shield speed (-400-400)
 
 // ==================== SHIELD 2 CONTROL PINS ================= //
 // M1 Plunger Motor
@@ -79,7 +80,7 @@ volatile int m3PrevB = LOW;
 // ============== MOTOR-SPECIFIC PARAMETERS =================== //
 // M1 Plunger Parameters
 const int M1_POSITION_TOLERANCE = 50;        // Acceptable position error (counts)
-const long M1_EXTEND_COUNTS     = 2000;     // Extension distance: 50 rotations
+const long M1_EXTEND_COUNTS     = 1900;     // Extension distance: 50 rotations
 const long M1_HOLD_TIME         = 1000;      // Compression hold time (milliseconds)
 
 // M2 Platform Parameters
@@ -89,7 +90,7 @@ const long M2_LOWER_COUNTS      = 78568;     // Lowering distance: 92 rotations
 // M3 Conveyor Parameters
 const int M3_POSITION_TOLERANCE = 10;        // Acceptable position error (counts)
 const long SAFE_POS_COUNTS      = 0;         // Home/safe position
-const long CONST_90_DEG         = 400;       // 90-degree movement (1/4 revolution)
+const long CONST_90_DEG         = 300;       // 90-degree movement (1/4 revolution)
 const long M3_MAX_VALID_POS     = 500;       // Maximum valid EEPROM position
 const long M3_MIN_VALID_POS     = -500;      // Minimum valid EEPROM position
 const int SAFE_SPEED            = 150;       // Speed for returning to safe position
@@ -261,8 +262,9 @@ void clearSerialInput(){
   }
 }
 
-// Checks if system has been paused
-bool checkPauseResume(){
+// Checks if system has been paused - blocks until resumed
+void checkPauseResume(){
+  // Check if pause key was pressed
   if (Serial.available() > 0){
     char input = Serial.read();
     if (input == 'P' || input == 'p'){
@@ -276,18 +278,17 @@ bool checkPauseResume(){
     }
   }
   
+  // Wait while paused
   while (systemPaused){
     if (Serial.available() > 0){
       char input = Serial.read();
       if (input == 'P' || input == 'p'){
         systemPaused = false;
         Serial.println("*** SYSTEM RESUMED ***");
-        return true;
       }
     }
     delay(100);
   }
-  return systemPaused;
 }
 
 // Move all motors to safe positions
@@ -358,9 +359,9 @@ bool allMotorsToSafePos(){
       md.setM2Speed(0);
       break;
     } else if (error > 0){
-      md.setM2Speed(SAFE_SPEED);
-    } else {
       md.setM2Speed(-SAFE_SPEED);
+    } else {
+      md.setM2Speed(SAFE_SPEED);
     }
     
     delay(10);
@@ -560,7 +561,7 @@ void setM1Direction(int dir){
   } else if (dir < 0){  // Retract
     digitalWrite(M1_INA, LOW);
     digitalWrite(M1_INB, HIGH);
-    analogWrite(M1_PWM, m1Speed);
+    analogWrite(M1_PWM, m1SpeedR);
   } else {              // Stop
     digitalWrite(M1_INA, LOW);
     digitalWrite(M1_INB, LOW);
@@ -582,7 +583,6 @@ bool runM1Sequence(){
   
   // STEP 1: Extend plunger with resistance detection
   Serial.println("Extending plunger to target position...");
-  setM1Direction(1);
   
   unsigned long lastPrintTime = millis();
   unsigned long startTime = millis();
@@ -592,7 +592,9 @@ bool runM1Sequence(){
   const long MIN_MOVEMENT_EXTEND = 50;  // Minimum counts to consider "moving" during extension
 
   while (true){
-    if (checkPauseResume()) break;
+    checkPauseResume();
+
+    setM1Direction(1);
 
     // Check for overall timeout (safety)
     if (millis() - startTime > M1_TIMEOUT){
@@ -645,19 +647,23 @@ bool runM1Sequence(){
   setM1Direction(0);
   Serial.println("Compression Complete.");
 
+  Serial.println("Releasing pressure...");
+  delay(800);  // 800ms release time
+
   // STEP 3: Retract plunger to start position
   Serial.println("Retracting plunger...");
-  setM1Direction(-1);
 
   // Re-initialize variables for retraction phase
   lastPosition = getM1Position();
   lastMovementTime = millis();
-  const unsigned long STALL_TIMEOUT = 500;
+  const unsigned long STALL_TIMEOUT = 1000;
   const long MIN_MOVEMENT_RETRACT = 20;  // Different sensitivity for retraction
   startTime = millis();
 
   while (abs(getM1Position()) > M1_POSITION_TOLERANCE){
-    if (checkPauseResume()) break;
+    checkPauseResume();
+
+    setM1Direction(-1);
 
     if (millis() - startTime > M1_TIMEOUT){
       Serial.println("ERROR: M1 retract timeout!");
@@ -703,7 +709,7 @@ bool moveM1ToPosition(long targetPosition, unsigned long timeout){
   long lastPosition = getM1Position();
   unsigned long lastMovementTime = millis();
   const unsigned long STALL_TIMEOUT = 500;  // 500ms no movement = stalled
-  const long MIN_MOVEMENT = 5;  // Minimum movement to reset stall timer
+  const long MIN_MOVEMENT = 20;  // Minimum movement to reset stall timer
 
   while (abs(getM1Position() - targetPosition) > M1_POSITION_TOLERANCE){
     // Checks for timeout
@@ -763,7 +769,7 @@ void testM1(){
   setM1Direction(-1);
   
   unsigned long startTime = millis();
-  while (abs(getM1Position()) < m1CountsPerRev){
+  while (abs(getM1Position()) < m1CountsPerRev * 2){
     if (millis() % 500 == 0) {  // Print every 500ms
       Serial.print("  M1 Count: ");
       Serial.println(getM1Position());
@@ -784,7 +790,7 @@ void testM1(){
   setM1Direction(-1);
   
   startTime = millis();
-  while (abs(getM1Position()) < m1CountsPerRev){
+  while (abs(getM1Position()) < m1CountsPerRev * 2){
     if (millis() % 500 == 0){  // Print every 500ms
       Serial.print("  M1 Count: ");
       Serial.println(getM1Position());
@@ -878,7 +884,6 @@ bool runM2Sequence(){
   
   // STEP 1: Lower platform to full position
   Serial.println("M2: Lowering to full position...");
-  setM2Direction(1);
 
   const long MAX_LOWER_LIMIT = M2_LOWER_COUNTS;
 
@@ -889,7 +894,9 @@ bool runM2Sequence(){
 
   unsigned long startTime = millis();
   while (abs(getM2Position()) < M2_LOWER_COUNTS){
-    if (checkPauseResume()) break;
+    checkPauseResume();
+
+    setM2Direction(1);
 
     if (millis() - startTime > M2_TIMEOUT){
       Serial.println("ERROR: M2 lower timeout!");
@@ -964,12 +971,13 @@ bool runM2Sequence(){
   
   // STEP 5: Raise platform back to start position
   Serial.println("M2: Raising back to start position...");
-  setM2Direction(-1);
   
   startTime = millis();
   
   while (abs(getM2Position()) > M2_POSITION_TOLERANCE){  // Allow tolerance
-    if (checkPauseResume()) break;
+    checkPauseResume();
+
+    setM2Direction(-1);
 
     if (millis() - startTime > M2_TIMEOUT){
       Serial.println("ERROR: M2 raise timeout!");
@@ -1056,7 +1064,7 @@ void testM2(){
   
   // FORWARD: Full rotation (lowering)
   Serial.println("LOWERING: One full rotation...");
-  setM2Direction(-1);
+  setM2Direction(1);
   
   unsigned long startTime = millis();
   while (abs(getM2Position()) < countsPerRev){
@@ -1077,7 +1085,7 @@ void testM2(){
   // REVERSE: Full rotation back (raising)
   Serial.println("RAISING: One full rotation...");
   m2Position = 0;  // Reset counter
-  setM2Direction(-1);
+  setM2Direction(1);
   
   startTime = millis();
   while (abs(getM2Position()) < countsPerRev){
@@ -1193,7 +1201,7 @@ bool moveM3ToPosition(long targetCount, unsigned long timeout){
       return false;
     }
 
-    if (checkPauseResume()) break;
+    checkPauseResume();
 
     if (checkMotorFaults()){
       Serial.println("Fault during M3 movement!");
@@ -1392,7 +1400,7 @@ void printStartUp(){
   PRINT_PROGMEM("║          ║   ║ ╚═══╝ ╚════╝           ║");
   PRINT_PROGMEM("║                                       ║");
   PRINT_PROGMEM("║       ASTROGLASS CONTROL SYSTEM       ║");
-  PRINT_PROGMEM("║             Version 2.0.2             ║");
+  PRINT_PROGMEM("║             Version 2.0.3             ║");
   PRINT_PROGMEM("║                                       ║");
   PRINT_PROGMEM("║   Lunar Regolith Glass Manufacturing  ║");
   PRINT_PROGMEM("╚═══════════════════════════════════════╝");
@@ -1417,6 +1425,7 @@ void printMainMenu(){
   PRINT_PROGMEM("");
   PRINT_PROGMEM("┌────────── POSITION CONTROLS ───────────┐");
   PRINT_PROGMEM("│  [H] Home All Motors                   │");
+  PRINT_PROGMEM("│  [P] Pause/Resume During Sequence      │");
   PRINT_PROGMEM("│  [R] Reset All Positions to Zero       │");
   PRINT_PROGMEM("└────────────────────────────────────────┘");
   PRINT_PROGMEM("");
@@ -1428,13 +1437,11 @@ void printMainMenu(){
   PRINT_PROGMEM("│  - [2] Test/Tune M2 Motor              │");
   PRINT_PROGMEM("│  - [3] Test/Tune M3 Motor              │");
   PRINT_PROGMEM("│  - [4] Test/Tune M4 Motor              │");
-  PRINT_PROGMEM("│  [V]  Show Code Version                │");
-  PRINT_PROGMEM("│  [?]  Team Credits                     │");
+  PRINT_PROGMEM("│  [V] Show Code Version                 │");
+  PRINT_PROGMEM("│  [?] Team Credits                      │");
   PRINT_PROGMEM("└────────────────────────────────────────┘");
   PRINT_PROGMEM("");
-  PRINT_PROGMEM(">> Enter Command: ");
+  PRINT_PROGMEM(">> Enter Command << ");
 }
-
-
 
 

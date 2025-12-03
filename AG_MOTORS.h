@@ -5,7 +5,7 @@
 // MOTOR(S):  x3 Maverick 12V DC Gear Motor w/Encoder (61:1),
 //            x1 Maverick Planetary DC Gear Motor w/Encoder (3.7:1)
 // AUTHOR:    Pedro Ortiz
-// VERSION:   h1.0.2
+// VERSION:   h1.0.3
 // ============================================================= //
 
 #ifndef AG_MOTORS_H
@@ -17,6 +17,7 @@
 
 // ======================== MOTOR SPEEDS ====================== //
 extern const int m1Speed;  // PWM speed (0-255)
+extern const int m1SpeedR;
 extern const int m2Speed;  // PWM speed (0-255)
 extern const int m3Speed;  // Shield speed (-400-400)
 extern const int m4Speed;  // Shield speed (-400-400)
@@ -107,7 +108,7 @@ void clearMotorFaults();
 bool checkEmergencyStop();
 void setSystemState(byte state);
 void clearSerialInput();
-bool checkPauseResume();
+void checkPauseResume();
 bool allMotorsToSafePos();
 void stopMotor(int motorNum);
 void stopAllMotors();
@@ -153,7 +154,6 @@ void printStartUp();
 void printMainMenu();
 
 #endif
-
 
 
 

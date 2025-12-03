@@ -1,9 +1,9 @@
 # AstroGlass Motor Control System
 
 **Author:** Pedro Ortiz  
-**Version:** 2.0.2
+**Version:** 2.0.3
 
-**Last Update:** 12/01/25 at 11:04p
+**Last Update:** 12/02/25 at 9:50p
 
 ---
 
@@ -57,6 +57,7 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 - **[T1]-[T4]** → Test motors, 1–4
 - **[H]** → Have all motors go to their home position
 - **[M]** → Display the speed of motors
+- **[P]** → Pause/Resume during sequence
 - **[R]** → Reset all motor positions to zero
 - **[S]** → Show all current motor positions
 - **[V]** → Version of the code
@@ -66,3 +67,4 @@ If you're wondering which file is the correct one, it's this one. You're welcome
 
 ## NOTES
 - "Without Music, Life Would Be A Mistake."
+
